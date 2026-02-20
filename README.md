@@ -21,8 +21,8 @@ pip install claude-afk
     ```json
     {
         "display_information": {
-            "name": "Claude Code Bridge",
-            "description": "Claude Code and Slack bridge",
+            "name": "Claude AFK",
+            "description": "Control Claude Code remotely via Slack",
             "background_color": "#505870"
         },
         "features": {
@@ -31,7 +31,7 @@ pip install claude-afk
                 "messages_tab_read_only_enabled": false
             },
             "bot_user": {
-                "display_name": "Claude Code Bridge",
+                "display_name": "Claude AFK",
                 "always_online": false
             }
         },
