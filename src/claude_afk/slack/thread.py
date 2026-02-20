@@ -33,6 +33,7 @@ def load(session_id: str) -> dict:
 
 def save(session_id: str, thread_ts: str) -> None:
     ensure_home()
+    _threads_dir().mkdir(parents=True, exist_ok=True)
     path = _threads_dir() / f"{session_id}.json"
     with open(path, "w") as f:
         json.dump({"thread_ts": thread_ts}, f)
