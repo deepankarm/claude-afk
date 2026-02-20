@@ -1,6 +1,6 @@
 # claude-afk
 
-Control [Claude Code](https://docs.anthropic.com/en/docs/claude-code) remotely via Slack — approve permissions, answer questions, and continue sessions while AFK.
+Control Claude Code remotely via Slack — approve permissions, answer questions, and continue sessions while AFK.
 
 ## Install
 

@@ -45,7 +45,7 @@ _TABLE_PATTERN = re.compile(
 
 _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
-PERMISSION_HINT = "\n\n_Reply *y* or *n*_"
+PERMISSION_HINT = "\n:lock: _To proceed, reply *y* or *n*_"
 
 
 def truncate(text: str, limit: int = MAX_SLACK_TEXT) -> str:
@@ -90,38 +90,38 @@ def format_tool_permission(tool_name: str, tool_input: dict) -> str:
     if tool_name == "Bash":
         cmd = tool_input.get("command", "")
         desc = tool_input.get("description", "")
-        text = f"`Bash`\n"
+        text = "Tool: `Bash`\n"
         if desc:
-            text += f"{desc}\n"
+            text += f"Description: {desc}\n"
         text += f"```\n{cmd[:2000]}\n```"
 
     elif tool_name == "Edit":
         fp = tool_input.get("file_path", "")
         old = tool_input.get("old_string", "")[:500]
         new = tool_input.get("new_string", "")[:500]
-        text = f"`Edit` → `{fp}`\n"
+        text = f"Tool: `Edit` → `{fp}`\n"
         text += f"Replace:\n```\n{old}\n```\nWith:\n```\n{new}\n```"
 
     elif tool_name == "Write":
         fp = tool_input.get("file_path", "")
         content = tool_input.get("content", "")[:1000]
-        text = f"`Write` → `{fp}`\n"
+        text = f"Tool: `Write` → `{fp}`\n"
         text += f"```\n{content}\n```"
 
     elif tool_name == "NotebookEdit":
         nb = tool_input.get("notebook_path", "")
         mode = tool_input.get("edit_mode", "replace")
-        text = f"`NotebookEdit` ({mode}) → `{nb}`\n"
+        text = f"Tool: `NotebookEdit` ({mode}) → `{nb}`\n"
         src = tool_input.get("new_source", "")[:1000]
         if src:
             text += f"```\n{src}\n```"
 
     else:
         input_str = json.dumps(tool_input, indent=2)[:1500]
-        text = f"`{tool_name}`\n"
+        text = f"Tool: `{tool_name}`\n"
         text += f"```\n{input_str}\n```"
 
-    text += f"\n:lock: Permission needed{PERMISSION_HINT}"
+    text += PERMISSION_HINT
     return truncate(text)
 
 
