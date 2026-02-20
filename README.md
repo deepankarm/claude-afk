@@ -13,52 +13,52 @@ pip install claude-afk
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From an app manifest**
 2. Paste the manifest:
 
-<details>
-<summary>Slack app manifest (click to expand)</summary>
+    <details>
+    <summary>Slack app manifest (click to expand)</summary>
 
-```json
-{
-    "display_information": {
-        "name": "Claude Code Bridge",
-        "description": "Claude Code and Slack bridge",
-        "background_color": "#505870"
-    },
-    "features": {
-        "app_home": {
-            "messages_tab_enabled": true,
-            "messages_tab_read_only_enabled": false
+    ```json
+    {
+        "display_information": {
+            "name": "Claude Code Bridge",
+            "description": "Claude Code and Slack bridge",
+            "background_color": "#505870"
         },
-        "bot_user": {
-            "display_name": "Claude Code Bridge",
-            "always_online": false
+        "features": {
+            "app_home": {
+                "messages_tab_enabled": true,
+                "messages_tab_read_only_enabled": false
+            },
+            "bot_user": {
+                "display_name": "Claude Code Bridge",
+                "always_online": false
+            }
+        },
+        "oauth_config": {
+            "scopes": {
+                "bot": [
+                    "chat:write",
+                    "im:history",
+                    "im:write"
+                ]
+            }
+        },
+        "settings": {
+            "event_subscriptions": {
+                "bot_events": [
+                    "message.im"
+                ]
+            },
+            "interactivity": {
+                "is_enabled": true
+            },
+            "org_deploy_enabled": false,
+            "socket_mode_enabled": true,
+            "token_rotation_enabled": false
         }
-    },
-    "oauth_config": {
-        "scopes": {
-            "bot": [
-                "chat:write",
-                "im:history",
-                "im:write"
-            ]
-        }
-    },
-    "settings": {
-        "event_subscriptions": {
-            "bot_events": [
-                "message.im"
-            ]
-        },
-        "interactivity": {
-            "is_enabled": true
-        },
-        "org_deploy_enabled": false,
-        "socket_mode_enabled": true,
-        "token_rotation_enabled": false
     }
-}
-```
+    ```
 
-</details>
+    </details>
 
 3. Install the app to your workspace
 4. Grab the tokens:
