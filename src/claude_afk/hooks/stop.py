@@ -36,14 +36,13 @@ def run(data: dict, config: SlackConfig) -> None:
 
     # Build header for new threads
     header_lines = [
-        ":white_check_mark: *Claude finished*",
-        f"> *Session ID:* `{short_id}`",
+        f"> Session ID: `{session_id}`",
     ]
     if session_name:
         first_line = session_name.split("\n")[0].strip()
-        header_lines.append(f"> *Session name:* {first_line}")
-    header_lines.append(f"> *Project:* `{project}`")
-    header_lines.append("\n> Reply to this thread to continue the session.")
+        header_lines.append(f"> Session: {first_line}")
+    header_lines.append(f"> Project: `{project}`")
+    header_lines.append("> Reply to this thread to continue the session.")
     header = "\n".join(header_lines)
 
     # Build message body
