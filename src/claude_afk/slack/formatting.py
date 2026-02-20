@@ -90,45 +90,38 @@ def format_tool_permission(tool_name: str, tool_input: dict) -> str:
     if tool_name == "Bash":
         cmd = tool_input.get("command", "")
         desc = tool_input.get("description", "")
-        text = ":lock: *Permission needed*\n\n*Tool:* `Bash`\n"
+        text = f"`Bash`\n"
         if desc:
-            text += f"*Description:* {desc}\n"
+            text += f"{desc}\n"
         text += f"```\n{cmd[:2000]}\n```"
-        text += PERMISSION_HINT
-        return truncate(text)
 
-    if tool_name == "Edit":
+    elif tool_name == "Edit":
         fp = tool_input.get("file_path", "")
         old = tool_input.get("old_string", "")[:500]
         new = tool_input.get("new_string", "")[:500]
-        text = f":lock: *Permission needed*\n\n*Tool:* `Edit` → `{fp}`\n"
-        text += f"*Replace:*\n```\n{old}\n```\n*With:*\n```\n{new}\n```"
-        text += PERMISSION_HINT
-        return truncate(text)
+        text = f"`Edit` → `{fp}`\n"
+        text += f"Replace:\n```\n{old}\n```\nWith:\n```\n{new}\n```"
 
-    if tool_name == "Write":
+    elif tool_name == "Write":
         fp = tool_input.get("file_path", "")
         content = tool_input.get("content", "")[:1000]
-        text = f":lock: *Permission needed*\n\n*Tool:* `Write` → `{fp}`\n"
+        text = f"`Write` → `{fp}`\n"
         text += f"```\n{content}\n```"
-        text += PERMISSION_HINT
-        return truncate(text)
 
-    if tool_name == "NotebookEdit":
+    elif tool_name == "NotebookEdit":
         nb = tool_input.get("notebook_path", "")
         mode = tool_input.get("edit_mode", "replace")
-        text = f":lock: *Permission needed*\n\n*Tool:* `NotebookEdit` ({mode}) → `{nb}`\n"
+        text = f"`NotebookEdit` ({mode}) → `{nb}`\n"
         src = tool_input.get("new_source", "")[:1000]
         if src:
             text += f"```\n{src}\n```"
-        text += PERMISSION_HINT
-        return truncate(text)
 
-    # Generic fallback
-    input_str = json.dumps(tool_input, indent=2)[:1500]
-    text = f":lock: *Permission needed*\n\n*Tool:* `{tool_name}`\n"
-    text += f"```\n{input_str}\n```"
-    text += PERMISSION_HINT
+    else:
+        input_str = json.dumps(tool_input, indent=2)[:1500]
+        text = f"`{tool_name}`\n"
+        text += f"```\n{input_str}\n```"
+
+    text += f"\n:lock: Permission needed{PERMISSION_HINT}"
     return truncate(text)
 
 
