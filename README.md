@@ -2,24 +2,19 @@
 
 Control [Claude Code](https://docs.anthropic.com/en/docs/claude-code) remotely via Slack — approve permissions, answer questions, and continue sessions while AFK.
 
-## How it works
-
-claude-afk installs [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) into Claude Code that route interactive prompts to your Slack DMs:
-
-- **Stop** — when Claude finishes, posts the last message to Slack. Reply in the thread to continue the session.
-- **PreToolUse** — tool permission requests and `AskUserQuestion` prompts are forwarded to Slack. Reply to approve/deny or answer.
-- **Notification** — one-way DM when Claude needs attention.
-
 ## Install
 
 ```bash
-uv tool install claude-afk            # or: pip install claude-afk
+pip install claude-afk
 ```
 
 ## Slack app setup
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From an app manifest**
-2. Paste this manifest:
+2. Paste the manifest:
+
+<details>
+<summary>Slack app manifest (click to expand)</summary>
 
 ```json
 {
@@ -63,47 +58,72 @@ uv tool install claude-afk            # or: pip install claude-afk
 }
 ```
 
+</details>
+
 3. Install the app to your workspace
 4. Grab the tokens:
    - **Bot Token** (`xoxb-...`): OAuth & Permissions → Bot User OAuth Token
    - **App-Level Token** (`xapp-...`): Basic Information → App-Level Tokens → Generate (scope: `connections:write`)
 5. Find your **Slack User ID**: click your profile → three dots → Copy member ID
 
-## Setup
-
-```bash
-claude-afk setup                       # prompts for tokens + verifies via Slack DM
-```
-
-Re-running `setup` preserves existing values — just press Enter to keep them.
-
 ## Usage
 
-```bash
-claude-afk enable all                  # route all sessions to Slack
-claude-afk enable <session-id>         # route a specific session
-claude-afk disable <session-id>        # stop routing a session
-claude-afk disable all                 # stop routing everything
-claude-afk status                      # show config and enabled sessions
-```
-
-### Multiple Claude homes
+### 1. Run setup
 
 ```bash
-claude-afk add-home ~/.claude-personal # register another Claude Code config dir
-claude-afk uninstall --claude-home ~/.claude-personal  # remove one
-claude-afk uninstall                   # remove hooks from all registered homes
+claude-afk setup
 ```
 
-## Development
+This prompts for your Slack tokens and user ID, verifies the connection by sending a code to your DMs, and installs hooks into Claude Code's `~/.claude/settings.json`.
+
+Re-running `setup` preserves existing values — press Enter to keep them.
+
+### 2. Enable a session
 
 ```bash
-git clone https://github.com/deepankarm/claude-afk.git
-cd claude-afk
-uv sync
-uv run pytest tests/ -v
+claude-afk enable <session-id>
 ```
 
-## License
+Now when Claude stops, needs a permission, or asks a question in that session, it gets routed to your Slack DMs. Reply in the thread to respond.
 
-Apache-2.0
+<!-- TODO: add screenshot -->
+
+### 3. Optionally, enable all sessions
+
+```bash
+claude-afk enable all
+```
+
+Routes every Claude Code session to Slack. Useful if you're stepping away and have multiple sessions running.
+
+### 4. When you're back, disable
+
+```bash
+claude-afk disable <session-id>    # disable one session
+claude-afk disable all              # disable everything
+```
+
+### Other commands
+
+```bash
+claude-afk status                              # show config and enabled sessions
+claude-afk add-home ~/.claude-personal         # register another Claude Code config dir
+claude-afk uninstall --claude-home ~/.claude    # remove hooks from one home
+claude-afk uninstall                           # remove hooks from all registered homes
+```
+
+## How it works
+
+claude-afk installs [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) into Claude Code that route interactive prompts to your Slack DMs:
+
+- **Stop** — when Claude finishes, posts the last message to Slack. Reply in the thread to continue the session.
+- **PreToolUse** — tool permission requests and `AskUserQuestion` prompts are forwarded to Slack. Reply to approve/deny or answer.
+- **Notification** — one-way DM when Claude needs attention.
+
+## Caution
+
+This is alpha software. Proceed with care.
+
+- **`settings.json` modification** — claude-afk merges hooks into your Claude Code config. It's tested to preserve existing settings, but back up your `settings.json` if you're cautious.
+- **Security** — this effectively gives you remote control of your machine through Slack. Anyone with access to your Slack bot tokens or your DM thread can approve tool executions. Treat your tokens like passwords.
+- **Not fully tested** — edge cases exist. If something breaks, `claude-afk uninstall` removes all hooks cleanly.
