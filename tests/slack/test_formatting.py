@@ -65,8 +65,8 @@ def test_format_tool_permission_bash():
     assert "`Bash`" in result
     assert "npm test" in result
     assert "Run tests" in result
-    assert "allow" in result
-    assert "deny" in result
+    assert "y" in result
+    assert "n" in result
 
 
 def test_format_tool_permission_edit():

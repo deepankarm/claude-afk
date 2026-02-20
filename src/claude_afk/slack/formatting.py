@@ -45,6 +45,8 @@ _TABLE_PATTERN = re.compile(
 
 _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
+PERMISSION_HINT = "\n\n_Reply *y* or *n*_"
+
 
 def truncate(text: str, limit: int = MAX_SLACK_TEXT) -> str:
     if len(text) <= limit:
@@ -92,7 +94,7 @@ def format_tool_permission(tool_name: str, tool_input: dict) -> str:
         if desc:
             text += f"*Description:* {desc}\n"
         text += f"```\n{cmd[:2000]}\n```"
-        text += "\n\n_Reply *allow* or *deny*_"
+        text += PERMISSION_HINT
         return truncate(text)
 
     if tool_name == "Edit":
@@ -101,7 +103,7 @@ def format_tool_permission(tool_name: str, tool_input: dict) -> str:
         new = tool_input.get("new_string", "")[:500]
         text = f":lock: *Permission needed*\n\n*Tool:* `Edit` → `{fp}`\n"
         text += f"*Replace:*\n```\n{old}\n```\n*With:*\n```\n{new}\n```"
-        text += "\n\n_Reply *allow* or *deny*_"
+        text += PERMISSION_HINT
         return truncate(text)
 
     if tool_name == "Write":
@@ -109,7 +111,7 @@ def format_tool_permission(tool_name: str, tool_input: dict) -> str:
         content = tool_input.get("content", "")[:1000]
         text = f":lock: *Permission needed*\n\n*Tool:* `Write` → `{fp}`\n"
         text += f"```\n{content}\n```"
-        text += "\n\n_Reply *allow* or *deny*_"
+        text += PERMISSION_HINT
         return truncate(text)
 
     if tool_name == "NotebookEdit":
@@ -119,14 +121,14 @@ def format_tool_permission(tool_name: str, tool_input: dict) -> str:
         src = tool_input.get("new_source", "")[:1000]
         if src:
             text += f"```\n{src}\n```"
-        text += "\n\n_Reply *allow* or *deny*_"
+        text += PERMISSION_HINT
         return truncate(text)
 
     # Generic fallback
     input_str = json.dumps(tool_input, indent=2)[:1500]
     text = f":lock: *Permission needed*\n\n*Tool:* `{tool_name}`\n"
     text += f"```\n{input_str}\n```"
-    text += "\n\n_Reply *allow* or *deny*_"
+    text += PERMISSION_HINT
     return truncate(text)
 
 
