@@ -123,21 +123,26 @@ class SlackBridge:
         sm_client: SocketModeClient,
         req: SocketModeRequest,
     ) -> None:
-        # Always acknowledge to prevent retries
-        sm_client.send_socket_mode_response(
-            SocketModeResponse(envelope_id=req.envelope_id),
-        )
-
         if req.type != "events_api":
+            sm_client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
             return
 
         event = req.payload.get("event", {})
+        is_thread_reply = (
+            event.get("type") == "message"
+            and not event.get("subtype")
+            and event.get("thread_ts")
+        )
 
-        if event.get("type") != "message":
+        # Don't ack thread replies meant for another session — Slack will
+        # retry delivery to the connection that owns that thread.
+        if is_thread_reply and event.get("thread_ts") != self.thread_ts:
             return
-        if event.get("subtype"):
-            return
-        if event.get("thread_ts") != self.thread_ts:
+
+        # Everything else is ours or irrelevant — ack it
+        sm_client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
+
+        if not is_thread_reply:
             return
         if event.get("channel") != self._config.dm_channel_id:
             return
