@@ -1,6 +1,8 @@
 # claude-afk
 
-Control Claude Code remotely via Slack — approve permissions, answer questions, and continue sessions while AFK.
+You're running Claude Code on your terminal. It's writing code, you're approving. But you have groceries to pick up, a dentist appointment, or a filter coffee waiting at Rameshwaram Cafe. The coding shouldn't stop — Claude writes the code anyway, you just approve. Why sit in front of the computer? Go touch grass.
+
+`claude-afk` routes Claude's prompts to your Slack DMs so you can keep things moving from your phone.
 
 ## Install
 
