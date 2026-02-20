@@ -72,13 +72,9 @@ pip install claude-afk
 
 ### 1. Run setup
 
-```bash
-claude-afk setup
-```
-
 This prompts for your Slack tokens and user ID, verifies the connection by sending a code to your DMs, and installs hooks into Claude Code's `~/.claude/settings.json`.
 
-```
+```bash
 ✗ claude-afk setup
 
 Slack Bot Token (xoxb-...): <xoxb-your-bot-token>
