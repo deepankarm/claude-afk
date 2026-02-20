@@ -126,3 +126,12 @@ def is_session_enabled(session_id: str) -> bool:
     if isinstance(enabled, list):
         return session_id in enabled
     return False
+
+
+def session_exists(session_id: str, claude_homes: list[str]) -> bool:
+    """Check if a session JSONL file exists in any registered claude-home."""
+    for home in claude_homes:
+        projects_dir = Path(home) / "projects"
+        if projects_dir.is_dir() and list(projects_dir.glob(f"*/{session_id}.jsonl")):
+            return True
+    return False

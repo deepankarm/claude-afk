@@ -13,6 +13,7 @@ from claude_afk.config import (
     is_session_enabled,
     load_state,
     save_state,
+    session_exists,
     setup_logging,
 )
 
@@ -99,3 +100,40 @@ def test_setup_logging(afk_home):
     logger = logging.getLogger("claude-afk")
     assert len(logger.handlers) > 0
     assert (afk_home / "logs" / "claude-afk.log").exists()
+
+
+# --- session_exists ---
+
+
+def test_session_exists_found(tmp_path):
+    home = tmp_path / "home1"
+    session_dir = home / "projects" / "myproject"
+    session_dir.mkdir(parents=True)
+    (session_dir / "sess-abc.jsonl").touch()
+    assert session_exists("sess-abc", [str(home)]) is True
+
+
+def test_session_exists_not_found(tmp_path):
+    home = tmp_path / "home1"
+    (home / "projects" / "myproject").mkdir(parents=True)
+    assert session_exists("sess-missing", [str(home)]) is False
+
+
+def test_session_exists_empty_homes():
+    assert session_exists("sess-abc", []) is False
+
+
+def test_session_exists_no_projects_dir(tmp_path):
+    home = tmp_path / "home1"
+    home.mkdir()
+    assert session_exists("sess-abc", [str(home)]) is False
+
+
+def test_session_exists_multiple_homes(tmp_path):
+    home1 = tmp_path / "home1"
+    home1.mkdir()
+    home2 = tmp_path / "home2"
+    session_dir = home2 / "projects" / "myproject"
+    session_dir.mkdir(parents=True)
+    (session_dir / "sess-xyz.jsonl").touch()
+    assert session_exists("sess-xyz", [str(home1), str(home2)]) is True

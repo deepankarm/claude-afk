@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import json
 import random
+import shutil
 import sys
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from claude_afk.config import (
     SlackConfig,
     load_state,
     save_state,
+    session_exists,
 )
 
 
@@ -62,30 +64,46 @@ def notify(event: str) -> None:
 
 _HOOK_MARKER = "claude-afk"
 
-_HOOKS_TO_INSTALL = {
-    "PreToolUse": [
-        {
-            "matcher": "AskUserQuestion",
-            "hooks": [{"type": "command", "command": "claude-afk hook pretooluse"}],
-        },
-        {
-            "matcher": "",
-            "hooks": [{"type": "command", "command": "claude-afk hook pretooluse"}],
-        },
-    ],
-    "Stop": [
-        {
-            "matcher": "",
-            "hooks": [{"type": "command", "command": "claude-afk hook stop"}],
-        },
-    ],
-    "Notification": [
-        {
-            "matcher": "",
-            "hooks": [{"type": "command", "command": "claude-afk hook notify"}],
-        },
-    ],
-}
+
+def _resolve_command_prefix() -> str:
+    """Resolve the command prefix for hook entries.
+
+    Uses the absolute path to ``claude-afk`` if it's on PATH (works for both
+    global installs and ``uv run``).  Falls back to invoking via the current
+    Python interpreter as a module.
+    """
+    which = shutil.which("claude-afk")
+    if which:
+        return str(Path(which).resolve())
+    return f"{sys.executable} -m claude_afk"
+
+
+def _build_hooks_to_install() -> dict:
+    prefix = _resolve_command_prefix()
+    return {
+        "PreToolUse": [
+            {
+                "matcher": "AskUserQuestion",
+                "hooks": [{"type": "command", "command": f"{prefix} hook pretooluse"}],
+            },
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": f"{prefix} hook pretooluse"}],
+            },
+        ],
+        "Stop": [
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": f"{prefix} hook stop"}],
+            },
+        ],
+        "Notification": [
+            {
+                "matcher": "",
+                "hooks": [{"type": "command", "command": f"{prefix} hook notify"}],
+            },
+        ],
+    }
 
 
 def _install_hooks(claude_home: str) -> bool:
@@ -104,7 +122,7 @@ def _install_hooks(claude_home: str) -> bool:
 
     hooks = settings.setdefault("hooks", {})
 
-    for event_name, entries in _HOOKS_TO_INSTALL.items():
+    for event_name, entries in _build_hooks_to_install().items():
         existing = hooks.get(event_name, [])
 
         # Remove any previous claude-afk entries to avoid duplicates
@@ -174,9 +192,33 @@ def setup(claude_home: str) -> None:
 
     click.echo("claude-afk setup\n")
 
-    bot_token = click.prompt("Slack Bot Token (xoxb-...)", hide_input=True)
-    socket_token = click.prompt("Slack App-Level Token (xapp-...)", hide_input=True)
-    user_id = click.prompt("Your Slack User ID (e.g. U05ABC123)")
+    existing = SlackConfig.from_file()
+
+    def _mask(secret: str) -> str:
+        """Return a masked version of a secret for display, e.g. '****pjJ5'."""
+        if len(secret) <= 4:
+            return "****" if secret else ""
+        return "****" + secret[-4:]
+
+    def _prompt_secret(label: str, current: str) -> str:
+        """Prompt for a secret, showing a masked hint. Enter keeps the existing value."""
+        if current:
+            value = click.prompt(
+                f"{label} [{_mask(current)}]",
+                default="",
+                show_default=False,
+                hide_input=True,
+            )
+            return value if value else current
+        return click.prompt(label, hide_input=True)
+
+    bot_token = _prompt_secret("Slack Bot Token (xoxb-...)", existing.bot_token)
+    socket_token = _prompt_secret("Slack App-Level Token (xapp-...)", existing.socket_mode_token)
+    user_id = click.prompt(
+        "Your Slack User ID (e.g. U05ABC123)",
+        default=existing.user_id or None,
+        show_default=existing.user_id if existing.user_id else False,
+    )
 
     click.echo("\nOpening DM conversation...")
     client = WebClient(token=bot_token)
@@ -188,7 +230,9 @@ def setup(claude_home: str) -> None:
         sys.exit(1)
 
     if not dm_resp.get("ok"):
-        click.echo(f"Error: conversations.open failed: {dm_resp.get('error')}", err=True)
+        click.echo(
+            f"Error: conversations.open failed: {dm_resp.get('error')}", err=True
+        )
         sys.exit(1)
 
     dm_channel_id = dm_resp["channel"]["id"]
@@ -217,7 +261,6 @@ def setup(claude_home: str) -> None:
     click.echo("Verified!\n")
 
     expanded_home = str(Path(claude_home).expanduser())
-    existing = SlackConfig.from_file()
     claude_homes = list(existing.claude_homes)
     if expanded_home not in claude_homes:
         claude_homes.append(expanded_home)
@@ -250,16 +293,28 @@ def setup(claude_home: str) -> None:
     click.echo("\nDone! Use `claude-afk enable all` to start routing to Slack.")
 
 
+def _require_setup() -> SlackConfig:
+    """Load config and abort if setup hasn't been run."""
+    cfg = SlackConfig.from_file()
+    if not cfg.is_valid():
+        click.echo(
+            f"Not configured. Run `claude-afk setup` first.\n\nConfig dir: {AFK_HOME}"
+        )
+        raise SystemExit(1)
+    return cfg
+
+
 @main.command()
 @click.argument("target")
 def enable(target: str) -> None:
     """Enable Slack routing for a session ID or 'all'."""
+    config = _require_setup()
     state = load_state()
 
     if target == "all":
         state["enabled"] = "all"
         save_state(state)
-        click.echo("Enabled for all sessions.")
+        click.echo(f"Enabled for all sessions.  (config: {AFK_HOME})")
         return
 
     enabled = state.get("enabled", [])
@@ -267,23 +322,31 @@ def enable(target: str) -> None:
         click.echo("Already enabled for all sessions.")
         return
 
+    if not session_exists(target, config.claude_homes):
+        click.echo(
+            f"Error: Session {target} not found in any registered Claude home.",
+            err=True,
+        )
+        raise SystemExit(1)
+
     if target not in enabled:
         enabled.append(target)
     state["enabled"] = enabled
     save_state(state)
-    click.echo(f"Enabled for session {target}")
+    click.echo(f"Enabled for session {target}  (config: {AFK_HOME})")
 
 
 @main.command()
 @click.argument("target")
 def disable(target: str) -> None:
     """Disable Slack routing for a session ID or 'all'."""
+    config = _require_setup()
     state = load_state()
 
     if target == "all":
         state["enabled"] = []
         save_state(state)
-        click.echo("Disabled for all sessions.")
+        click.echo(f"Disabled for all sessions.  (config: {AFK_HOME})")
         return
 
     enabled = state.get("enabled", [])
@@ -293,11 +356,18 @@ def disable(target: str) -> None:
         )
         return
 
+    if not session_exists(target, config.claude_homes):
+        click.echo(
+            f"Error: Session {target} not found in any registered Claude home.",
+            err=True,
+        )
+        raise SystemExit(1)
+
     if target in enabled:
         enabled.remove(target)
     state["enabled"] = enabled
     save_state(state)
-    click.echo(f"Disabled for session {target}")
+    click.echo(f"Disabled for session {target}  (config: {AFK_HOME})")
 
 
 @main.command()
@@ -305,11 +375,9 @@ def status() -> None:
     """Show claude-afk status — config, enabled sessions, hooks."""
     click.echo(f"claude-afk v{__version__}\n")
 
-    config = SlackConfig.from_file()
-    if not config.is_valid():
-        click.echo("Not configured. Run `claude-afk setup` first.")
-        return
+    config = _require_setup()
 
+    click.echo(f"Config dir:    {AFK_HOME}")
     click.echo(f"Slack user:    {config.user_id}")
     click.echo(f"DM channel:    {config.dm_channel_id}")
     click.echo(f"Timeout:       {config.timeout}s")
@@ -329,33 +397,81 @@ def status() -> None:
 @main.command()
 @click.option(
     "--claude-home",
-    default="~/.claude",
-    help="Path to Claude Code config directory (default: ~/.claude).",
+    default=None,
+    help="Path to a single Claude Code config directory to uninstall from. "
+    "If omitted, uninstalls from all registered homes.",
 )
-def uninstall(claude_home: str) -> None:
-    """Remove claude-afk hooks from a Claude Code config directory."""
-    expanded_home = str(Path(claude_home).expanduser())
+def uninstall(claude_home: str | None) -> None:
+    """Remove claude-afk hooks from Claude Code config directories.
 
-    if _uninstall_hooks(claude_home):
-        click.echo(
-            f"Removed claude-afk hooks from {Path(claude_home).expanduser() / 'settings.json'}"
-        )
-    else:
-        click.echo(
-            f"No claude-afk hooks found in {Path(claude_home).expanduser() / 'settings.json'}"
-        )
-
-    # Remove from config's claude_homes list
+    With no options, removes hooks from every registered home.
+    Use --claude-home to target a single directory.
+    """
     config = SlackConfig.from_file()
-    if expanded_home in config.claude_homes:
-        new_homes = [h for h in config.claude_homes if h != expanded_home]
-        updated = SlackConfig(
-            bot_token=config.bot_token,
-            socket_mode_token=config.socket_mode_token,
-            user_id=config.user_id,
-            dm_channel_id=config.dm_channel_id,
-            timeout=config.timeout,
-            claude_homes=new_homes,
-        )
-        updated.save()
-        click.echo(f"Removed {expanded_home} from registered Claude homes.")
+
+    if claude_home is not None:
+        homes_to_remove = [str(Path(claude_home).expanduser())]
+    else:
+        homes_to_remove = list(config.claude_homes) if config.claude_homes else []
+
+    if not homes_to_remove:
+        click.echo("No Claude homes registered — nothing to uninstall.")
+        return
+
+    remaining_homes = list(config.claude_homes)
+
+    for home in homes_to_remove:
+        if _uninstall_hooks(home):
+            click.echo(f"Removed claude-afk hooks from {Path(home) / 'settings.json'}")
+        else:
+            click.echo(f"No claude-afk hooks found in {Path(home) / 'settings.json'}")
+
+        if home in remaining_homes:
+            remaining_homes.remove(home)
+
+    updated = SlackConfig(
+        bot_token=config.bot_token,
+        socket_mode_token=config.socket_mode_token,
+        user_id=config.user_id,
+        dm_channel_id=config.dm_channel_id,
+        timeout=config.timeout,
+        claude_homes=remaining_homes,
+    )
+    updated.save()
+
+    removed_count = len(homes_to_remove)
+    if removed_count == 1:
+        click.echo(f"Removed {homes_to_remove[0]} from registered Claude homes.")
+    else:
+        click.echo(f"Removed {removed_count} Claude homes.")
+
+
+@main.command("add-home")
+@click.argument("path")
+def add_home(path: str) -> None:
+    """Register an additional Claude Code home directory."""
+    config = _require_setup()
+    expanded = str(Path(path).expanduser())
+
+    if not Path(expanded).is_dir():
+        click.echo(f"Error: {expanded} is not an existing directory.", err=True)
+        raise SystemExit(1)
+
+    if expanded in config.claude_homes:
+        click.echo(f"{expanded} is already registered.")
+        return
+
+    _install_hooks(expanded)
+    click.echo(f"Hooks installed in {Path(expanded) / 'settings.json'}")
+
+    new_homes = [*list(config.claude_homes), expanded]
+    updated = SlackConfig(
+        bot_token=config.bot_token,
+        socket_mode_token=config.socket_mode_token,
+        user_id=config.user_id,
+        dm_channel_id=config.dm_channel_id,
+        timeout=config.timeout,
+        claude_homes=new_homes,
+    )
+    updated.save()
+    click.echo(f"Registered {expanded} as a Claude home.  (config: {AFK_HOME})")

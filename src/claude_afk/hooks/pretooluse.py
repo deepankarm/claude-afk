@@ -179,6 +179,9 @@ def run(data: dict, config: SlackConfig) -> None:
 
 def main() -> None:
     setup_logging()
+    if sys.stdin.isatty():
+        print("Error: This hook reads JSON from stdin and is meant to be called by Claude Code, not directly.", file=sys.stderr)
+        sys.exit(1)
     try:
         data = json.load(sys.stdin)
     except json.JSONDecodeError:
