@@ -78,6 +78,24 @@ claude-afk setup
 
 This prompts for your Slack tokens and user ID, verifies the connection by sending a code to your DMs, and installs hooks into Claude Code's `~/.claude/settings.json`.
 
+```
+✗ claude-afk setup
+
+Slack Bot Token (xoxb-...): <xoxb-your-bot-token>
+Slack App-Level Token (xapp-...): <xapp-your-app-level-token>
+Your Slack User ID (e.g. U05ABC123): <your-user-id>
+
+Opening DM conversation...
+Sent a verification code to your Slack DMs.
+Enter the 6-digit code from Slack: <code-you-just-received>
+Verified!
+
+Config saved to .../.claude-afk/config.json
+Hooks installed in .../.claude/settings.json
+
+Done! Use `claude-afk enable all` to start routing to Slack.
+```
+
 ### 2. Enable a session-id
 
 ```bash
