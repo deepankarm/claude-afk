@@ -36,7 +36,7 @@ def run(data: dict, config: SlackConfig) -> None:
 
     # Build header for new threads
     header_lines = [
-        f"> Session ID: `{session_id}`",
+        f">  Session ID: `{session_id}`",
     ]
     if session_name:
         first_line = session_name.split("\n")[0].strip()
