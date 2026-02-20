@@ -49,6 +49,7 @@ class SlackBridge:
         # Reply synchronization
         self._reply_event = threading.Event()
         self._reply_text: str | None = None
+        self._last_post_ts: str | None = None  # reject replies older than this
 
     def __enter__(self) -> SlackBridge:
         auth = self._web_client.auth_test()
@@ -97,6 +98,7 @@ class SlackBridge:
             self.thread_ts = resp.get("ts")
             log.debug("new thread started ts=%s", self.thread_ts)
 
+        self._last_post_ts = resp.get("ts")
         thread_state.save(self._session_id, self.thread_ts)
         return True
 
@@ -145,6 +147,12 @@ class SlackBridge:
             return
         if self._config.user_id and event.get("user") != self._config.user_id:
             log.debug("ignoring reply from non-verified user %s", event.get("user"))
+            return
+
+        # Ignore stale messages sent before the bot's latest post
+        msg_ts = event.get("ts", "")
+        if self._last_post_ts and msg_ts <= self._last_post_ts:
+            log.debug("ignoring stale message ts=%s (bot posted at %s)", msg_ts, self._last_post_ts)
             return
 
         self._reply_text = event.get("text", "")

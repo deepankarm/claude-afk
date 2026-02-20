@@ -8,7 +8,7 @@ Control [Claude Code](https://docs.anthropic.com/en/docs/claude-code) remotely v
 pip install claude-afk
 ```
 
-## Slack app setup
+## Slack app setup (One time, for admins)
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From an app manifest**
 2. Paste the manifest:
@@ -76,9 +76,7 @@ claude-afk setup
 
 This prompts for your Slack tokens and user ID, verifies the connection by sending a code to your DMs, and installs hooks into Claude Code's `~/.claude/settings.json`.
 
-Re-running `setup` preserves existing values — press Enter to keep them.
-
-### 2. Enable a session
+### 2. Enable a session-id
 
 ```bash
 claude-afk enable <session-id>
@@ -88,7 +86,7 @@ Now when Claude stops, needs a permission, or asks a question in that session, i
 
 <!-- TODO: add screenshot -->
 
-### 3. Optionally, enable all sessions
+Optionally, you can enable all sessions
 
 ```bash
 claude-afk enable all
@@ -100,7 +98,7 @@ Routes every Claude Code session to Slack. Useful if you're stepping away and ha
 
 ```bash
 claude-afk disable <session-id>    # disable one session
-claude-afk disable all              # disable everything
+claude-afk disable all             # disable all sessions
 ```
 
 ### Other commands
@@ -108,7 +106,7 @@ claude-afk disable all              # disable everything
 ```bash
 claude-afk status                              # show config and enabled sessions
 claude-afk add-home ~/.claude-personal         # register another Claude Code config dir
-claude-afk uninstall --claude-home ~/.claude    # remove hooks from one home
+claude-afk uninstall --claude-home ~/.claude   # remove hooks from one home
 claude-afk uninstall                           # remove hooks from all registered homes
 ```
 
@@ -124,6 +122,6 @@ claude-afk installs [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks
 
 This is alpha software. Proceed with care.
 
-- **`settings.json` modification** — claude-afk merges hooks into your Claude Code config. It's tested to preserve existing settings, but back up your `settings.json` if you're cautious.
-- **Security** — this effectively gives you remote control of your machine through Slack. Anyone with access to your Slack bot tokens or your DM thread can approve tool executions. Treat your tokens like passwords.
+- **`settings.json` modification** — `claude-afk` merges hooks into your Claude Code config. It's tested to preserve existing settings, but back up your `settings.json` if you're cautious.
+- **Security** — this effectively gives you remote control of your machine through Slack. Anyone with access to your Slack bot tokens or your DM thread can approve tool executions.
 - **Not fully tested** — edge cases exist. If something breaks, `claude-afk uninstall` removes all hooks cleanly.
