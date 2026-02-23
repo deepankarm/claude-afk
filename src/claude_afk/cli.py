@@ -49,6 +49,14 @@ def pretooluse() -> None:
 
 
 @hook.command()
+def planapproval() -> None:
+    """Handle the PermissionRequest hook for ExitPlanMode — plan approval via Slack."""
+    from claude_afk.hooks.planapproval import main as planapproval_main
+
+    planapproval_main()
+
+
+@hook.command()
 @click.option(
     "--event",
     type=click.Choice(["stop", "notification"]),
@@ -95,6 +103,18 @@ def _build_hooks_to_install() -> dict:
             {
                 "matcher": "",
                 "hooks": [{"type": "command", "command": f"{prefix} hook stop"}],
+            },
+        ],
+        "PermissionRequest": [
+            {
+                "matcher": "ExitPlanMode",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"{prefix} hook planapproval",
+                        "timeout": 1800,
+                    }
+                ],
             },
         ],
         "Notification": [
