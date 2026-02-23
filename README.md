@@ -135,8 +135,8 @@ claude-afk installs [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks
 
 ## Caution
 
-This is alpha software. Proceed with care.
+This is new. Please proceed with care.
 
-- **`settings.json` modification** - `claude-afk` merges hooks into your Claude Code config. It's tested to preserve existing settings, but back up your `settings.json` if you're cautious.
-- **Security** - this effectively gives you remote control of your machine through Slack. Anyone with access to your Slack bot tokens or your DM thread can approve tool executions.
+- **`settings.json` modification** - `claude-afk` merges hooks into your Claude Code config. It's tested to preserve existing settings, but back up your `settings.json` to be safe.
+- **Security** - this effectively gives you remote control of your machine through Slack. Anyone with access to your Slack DM can approve tool executions.
 - **Not fully tested** - edge cases exist. If something breaks, `claude-afk uninstall` removes all hooks cleanly.
