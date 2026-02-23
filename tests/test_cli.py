@@ -7,10 +7,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from claude_afk import config
 from claude_afk.cli import _install_hooks, _uninstall_hooks, main
 from claude_afk.config import SlackConfig, load_state, save_state
-
 
 # --- enable/disable ---
 

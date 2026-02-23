@@ -9,7 +9,6 @@ from claude_afk.slack.formatting import (
     truncate,
 )
 
-
 # --- truncate ---
 
 

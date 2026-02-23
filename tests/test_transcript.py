@@ -6,7 +6,6 @@ import json
 
 from claude_afk.transcript import get_last_assistant_message, get_session_name
 
-
 # --- get_session_name ---
 
 

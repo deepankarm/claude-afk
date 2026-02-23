@@ -367,6 +367,14 @@ def disable(target: str) -> None:
         enabled.remove(target)
     state["enabled"] = enabled
     save_state(state)
+
+    # Clean up session permission cache
+    session_dir = AFK_HOME / "sessions" / target
+    if session_dir.is_dir():
+        import shutil
+
+        shutil.rmtree(session_dir)
+
     click.echo(f"Disabled for session {target}  (config: {AFK_HOME})")
 
 

@@ -16,7 +16,18 @@ import logging
 import sys
 
 from claude_afk.config import SlackConfig, is_session_enabled, setup_logging
-from claude_afk.permissions import load_cc_permission_rules, tool_has_cc_rule
+from claude_afk.permissions import (
+    TOOL_POLICIES,
+    Decision,
+    ToolPolicy,
+    build_session_rule,
+    check_session_permission,
+    get_tool_input_value,
+    is_sensitive_path,
+    load_cc_permission_rules,
+    save_session_permission,
+    tool_has_cc_rule,
+)
 from claude_afk.slack.bridge import SlackBridge
 from claude_afk.slack.formatting import format_single_question, format_tool_permission
 
@@ -26,14 +37,14 @@ _ALLOW_WORDS = {"allow", "yes", "y", "approve", "ok", "lgtm", "go", "proceed", "
 _DENY_WORDS = {"deny", "no", "n", "reject", "block", "stop", "nope", "cancel"}
 
 
-def parse_permission_reply(text: str) -> str:
-    """Parse allow/deny from a Slack reply. Returns 'allow', 'deny', or 'unclear'."""
+def parse_permission_reply(text: str) -> Decision:
+    """Parse allow/deny from a Slack reply."""
     normalized = text.strip().lower().rstrip("!.,")
     if normalized in _ALLOW_WORDS:
-        return "allow"
+        return Decision.ALLOW
     if normalized in _DENY_WORDS:
-        return "deny"
-    return "unclear"
+        return Decision.DENY
+    return Decision.UNCLEAR
 
 
 def resolve_question_answer(reply: str, question: dict) -> str:
@@ -67,7 +78,7 @@ def resolve_question_answer(reply: str, question: dict) -> str:
     return reply
 
 
-def _emit(decision: str, reason: str) -> None:
+def _emit(decision: Decision, reason: str) -> None:
     """Print a PreToolUse hook response to stdout."""
     result = {
         "hookSpecificOutput": {
@@ -115,13 +126,14 @@ def _handle_ask_user_question(
     bridge.post("\n".join(confirm_parts))
 
     log.debug("question answers combined=%r", combined)
-    _emit("deny", f"User replied from Slack: {combined}")
+    _emit(Decision.DENY, f"User replied from Slack: {combined}")
 
 
 def _handle_permission(
     bridge: SlackBridge,
     tool_name: str,
     tool_input: dict,
+    session_id: str,
 ) -> None:
     """Post permission prompt, wait for allow/deny reply."""
     text = format_tool_permission(tool_name, tool_input)
@@ -136,12 +148,28 @@ def _handle_permission(
 
     log.debug("permission reply=%r decision=%s tool=%s", reply, decision, tool_name)
 
-    if decision == "allow":
-        _emit("allow", "Approved via Slack")
-    elif decision == "deny":
-        _emit("deny", f"Denied via Slack: {reply}")
+    if decision == Decision.ALLOW:
+        _emit(Decision.ALLOW, "Approved via Slack")
+    elif decision == Decision.DENY:
+        _emit(Decision.DENY, f"Denied via Slack: {reply}")
     else:
-        _emit("allow", f"User said via Slack: {reply}")
+        _emit(Decision.ALLOW, f"User said via Slack: {reply}")
+
+    # Cache the decision for cacheable tools (e.g. Edit, sensitive Reads)
+    effective = decision if decision != Decision.UNCLEAR else Decision.ALLOW
+    rule = build_session_rule(tool_name, tool_input)
+    if rule:
+        save_session_permission(session_id, rule, effective)
+        log.debug("cached session permission: %s -> %s", rule, effective)
+
+
+def _check_auto_allow(tool_name: str, tool_input: dict) -> bool:
+    """Return True if the tool should be silently auto-allowed."""
+    policy = TOOL_POLICIES.get(tool_name, ToolPolicy.ALWAYS_ASK)
+    if policy != ToolPolicy.AUTO_ALLOW:
+        return False
+    value = get_tool_input_value(tool_name, tool_input)
+    return not is_sensitive_path(value)
 
 
 def run(data: dict, config: SlackConfig) -> None:
@@ -161,17 +189,36 @@ def run(data: dict, config: SlackConfig) -> None:
     if is_ask and not questions:
         sys.exit(0)
 
+    # Auto-allow safe tools (Read non-sensitive, Grep, Glob)
+    if not is_ask and _check_auto_allow(tool_name, tool_input):
+        log.debug("auto-allow %s (safe tool, non-sensitive)", tool_name)
+        _emit(Decision.ALLOW, f"Auto-allowed ({tool_name})")
+        return
+
     lock_path = f"/tmp/slack_bridge_{session_id}.lock"
     log.debug("acquiring lock %s", lock_path)
     with open(lock_path, "w") as lock_fd:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
         log.debug("lock acquired, connecting to Slack")
+
+        # Check session cache inside the lock — parallel hooks may have
+        # written a cache entry while we were waiting for the lock.
+        cached = check_session_permission(session_id, tool_name, tool_input)
+        if cached == Decision.ALLOW:
+            log.debug("tool %s matched session allow rule, auto-approving", tool_name)
+            _emit(Decision.ALLOW, "Auto-approved from session cache")
+            return
+        if cached == Decision.DENY:
+            log.debug("tool %s matched session deny rule, auto-denying", tool_name)
+            _emit(Decision.DENY, "Auto-denied from session cache")
+            return
+
         try:
             with SlackBridge(config, session_id) as bridge:
                 if is_ask:
                     _handle_ask_user_question(bridge, questions)
                 else:
-                    _handle_permission(bridge, tool_name, tool_input)
+                    _handle_permission(bridge, tool_name, tool_input, session_id)
         finally:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
             log.debug("lock released")
@@ -180,7 +227,10 @@ def run(data: dict, config: SlackConfig) -> None:
 def main() -> None:
     setup_logging()
     if sys.stdin.isatty():
-        print("Error: This hook reads JSON from stdin and is meant to be called by Claude Code, not directly.", file=sys.stderr)
+        print(
+            "Error: This hook reads JSON from stdin, not meant to be called directly.",
+            file=sys.stderr,
+        )
         sys.exit(1)
     try:
         data = json.load(sys.stdin)

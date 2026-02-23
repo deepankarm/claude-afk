@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import os
 import stat
 
-from claude_afk import config
 from claude_afk.config import (
     SlackConfig,
-    ensure_home,
     is_session_enabled,
     load_state,
     save_state,
@@ -49,7 +46,9 @@ def test_slack_config_roundtrip(afk_home):
 
 
 def test_slack_config_file_permissions(afk_home):
-    cfg = SlackConfig(bot_token="xoxb-secret", socket_mode_token="x", user_id="U1", dm_channel_id="D1")
+    cfg = SlackConfig(
+        bot_token="xoxb-secret", socket_mode_token="x", user_id="U1", dm_channel_id="D1"
+    )
     cfg.save()
     path = afk_home / "config.json"
     mode = stat.S_IMODE(os.stat(path).st_mode)
