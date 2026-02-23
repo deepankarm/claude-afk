@@ -1,6 +1,6 @@
 # claude-afk
 
-You're running Claude Code on your terminal. It's writing code, you're approving. But you have groceries to pick up, a dentist appointment, or a filter coffee waiting at Rameshwaram Cafe. The coding shouldn't stop — Claude writes the code anyway, you just approve. Why sit in front of the computer? Go touch grass.
+You're running Claude Code on your terminal. It's writing code, you're approving. But you have groceries to pick up, a dentist appointment, or a filter coffee waiting at Rameshwaram Cafe. The coding shouldn't stop - Claude writes the code anyway, you just approve. Why sit in front of the computer? Go touch grass.
 
 `claude-afk` routes Claude's prompts to your Slack DMs so you can keep things moving from your phone. Proceed with [Caution](#caution).
 
@@ -92,29 +92,28 @@ Hooks installed in .../.claude/settings.json
 Done! Use `claude-afk enable all` to start routing to Slack.
 ```
 
-### 2. Enable a session-id
+### 2. Enable and keep coding
 
 ```bash
-claude-afk enable <session-id>
+claude-afk enable <session-id>   # or `claude-afk enable all`
 ```
 
-Now when Claude stops, needs a permission, or asks a question in that session, it gets routed to your Slack DMs. Reply in the thread to respond.
+Then keep using Claude Code like before:
+
+```bash
+claude --resume <session-id>
+```
+
+When Claude needs a permission, asks a question, or finishes - it gets routed to your Slack DMs. Reply in the thread to respond.
 
 <!-- TODO: add screenshot -->
 
-Optionally, you can enable all sessions
-
-```bash
-claude-afk enable all
-```
-
-Routes every Claude Code session to Slack. Useful if you're stepping away and have multiple sessions running.
-
-### 4. When you're back, disable
+### 3. When you're back, disable
 
 ```bash
 claude-afk disable <session-id>    # disable one session
 claude-afk disable all             # disable all sessions
+claude --resume <session-id>       # continue like before
 ```
 
 ### Other commands
@@ -130,14 +129,14 @@ claude-afk uninstall                           # remove hooks from all registere
 
 claude-afk installs [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) into Claude Code that route interactive prompts to your Slack DMs:
 
-- **Stop** — when Claude finishes, posts the last message to Slack. Reply in the thread to continue the session.
-- **PreToolUse** — tool permission requests and `AskUserQuestion` prompts are forwarded to Slack. Reply to approve/deny or answer.
-- **Notification** — one-way DM when Claude needs attention.
+- **Stop** - when Claude finishes, posts the last message to Slack. Reply in the thread to continue the session.
+- **PreToolUse** - tool permission requests and `AskUserQuestion` prompts are forwarded to Slack. Reply to approve/deny or answer.
+- **Notification** - one-way DM when Claude needs attention.
 
 ## Caution
 
 This is alpha software. Proceed with care.
 
-- **`settings.json` modification** — `claude-afk` merges hooks into your Claude Code config. It's tested to preserve existing settings, but back up your `settings.json` if you're cautious.
-- **Security** — this effectively gives you remote control of your machine through Slack. Anyone with access to your Slack bot tokens or your DM thread can approve tool executions.
-- **Not fully tested** — edge cases exist. If something breaks, `claude-afk uninstall` removes all hooks cleanly.
+- **`settings.json` modification** - `claude-afk` merges hooks into your Claude Code config. It's tested to preserve existing settings, but back up your `settings.json` if you're cautious.
+- **Security** - this effectively gives you remote control of your machine through Slack. Anyone with access to your Slack bot tokens or your DM thread can approve tool executions.
+- **Not fully tested** - edge cases exist. If something breaks, `claude-afk uninstall` removes all hooks cleanly.
