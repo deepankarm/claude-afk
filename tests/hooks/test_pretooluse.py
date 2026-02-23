@@ -1,4 +1,4 @@
-"""Tests for hooks.pretooluse — permission parsing, question resolution, emit, handlers."""
+"""Tests for hooks.pretooluse — question resolution, emit, handlers."""
 
 from __future__ import annotations
 
@@ -9,42 +9,10 @@ from claude_afk.hooks.pretooluse import (
     _emit,
     _handle_ask_user_question,
     _handle_permission,
-    parse_permission_reply,
     resolve_question_answer,
     run,
 )
-from claude_afk.permissions import Decision
-
-# --- parse_permission_reply ---
-
-
-def test_parse_permission_reply_allow():
-    for word in ("allow", "yes", "y", "approve", "ok", "lgtm", "go", "proceed", "sure", "yep"):
-        assert parse_permission_reply(word) == Decision.ALLOW, f"Expected ALLOW for {word!r}"
-
-
-def test_parse_permission_reply_deny():
-    for word in ("deny", "no", "n", "reject", "block", "stop", "nope", "cancel"):
-        assert parse_permission_reply(word) == Decision.DENY, f"Expected DENY for {word!r}"
-
-
-def test_parse_permission_reply_unclear():
-    assert parse_permission_reply("maybe later") == Decision.UNCLEAR
-    assert parse_permission_reply("hmm") == Decision.UNCLEAR
-
-
-def test_parse_permission_reply_case_insensitive():
-    assert parse_permission_reply("YES") == Decision.ALLOW
-    assert parse_permission_reply("Allow") == Decision.ALLOW
-    assert parse_permission_reply("DENY") == Decision.DENY
-    assert parse_permission_reply("No") == Decision.DENY
-
-
-def test_parse_permission_reply_with_punctuation():
-    assert parse_permission_reply("yes!") == Decision.ALLOW
-    assert parse_permission_reply("ok.") == Decision.ALLOW
-    assert parse_permission_reply("no!") == Decision.DENY
-
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY
 
 # --- resolve_question_answer ---
 
@@ -81,7 +49,7 @@ def test_emit_allow(capsys):
 
 
 def test_emit_deny(capsys):
-    _emit("deny", "Denied via Slack: no")
+    _emit("deny", "Denied via Slack")
     output = json.loads(capsys.readouterr().out.strip())
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "Denied via Slack" in output["hookSpecificOutput"]["permissionDecisionReason"]
@@ -90,22 +58,32 @@ def test_emit_deny(capsys):
 # --- _handle_permission ---
 
 
-def test_handle_permission_allow(capsys):
+def test_handle_permission_allow_via_reaction(capsys):
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "yes"
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
     _handle_permission(bridge, "Bash", {"command": "ls"}, "sess-test")
     output = json.loads(capsys.readouterr().out.strip())
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
 
 
-def test_handle_permission_deny(capsys):
+def test_handle_permission_deny_via_reaction(capsys):
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "deny"
+    bridge.wait_for_reply.return_value = REPLY_DENY
     _handle_permission(bridge, "Bash", {"command": "rm -rf /"}, "sess-test")
     output = json.loads(capsys.readouterr().out.strip())
     assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_handle_permission_text_reply_is_deny_with_feedback(capsys):
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    bridge.wait_for_reply.return_value = "use pytest instead"
+    _handle_permission(bridge, "Bash", {"command": "npm test"}, "sess-test")
+    output = json.loads(capsys.readouterr().out.strip())
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "pytest instead" in output["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_handle_permission_caches_read_allow(capsys, tmp_path, monkeypatch):
@@ -115,7 +93,7 @@ def test_handle_permission_caches_read_allow(capsys, tmp_path, monkeypatch):
 
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "y"
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
     _handle_permission(bridge, "Read", {"file_path": "/tmp/.env"}, "sess-cache")
     capsys.readouterr()
 
@@ -124,19 +102,35 @@ def test_handle_permission_caches_read_allow(capsys, tmp_path, monkeypatch):
     assert result == "allow"
 
 
-def test_handle_permission_caches_read_deny(capsys, tmp_path, monkeypatch):
+def test_handle_permission_does_not_cache_deny(capsys, tmp_path, monkeypatch):
     import claude_afk.permissions as perms
 
     monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
 
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "n"
+    bridge.wait_for_reply.return_value = REPLY_DENY
+    _handle_permission(bridge, "Read", {"file_path": "/tmp/.env"}, "sess-cache")
+    capsys.readouterr()
+
+    # Denies are not cached — user should be re-prompted next time
+    result = perms.check_session_permission("sess-cache", "Read", {"file_path": "/tmp/.env"})
+    assert result is None
+
+
+def test_handle_permission_does_not_cache_feedback(capsys, tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    bridge.wait_for_reply.return_value = "don't read that file"
     _handle_permission(bridge, "Read", {"file_path": "/tmp/.env"}, "sess-cache")
     capsys.readouterr()
 
     result = perms.check_session_permission("sess-cache", "Read", {"file_path": "/tmp/.env"})
-    assert result == "deny"
+    assert result is None
 
 
 def test_handle_permission_caches_edit_allow(capsys, tmp_path, monkeypatch):
@@ -146,7 +140,7 @@ def test_handle_permission_caches_edit_allow(capsys, tmp_path, monkeypatch):
 
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "y"
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
     _handle_permission(bridge, "Edit", {"file_path": "/tmp/main.py"}, "sess-cache")
     capsys.readouterr()
 
@@ -164,7 +158,7 @@ def test_handle_permission_no_cache_for_bash(capsys, tmp_path, monkeypatch):
 
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "y"
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
     _handle_permission(bridge, "Bash", {"command": "ls"}, "sess-cache")
     capsys.readouterr()
 
@@ -244,7 +238,7 @@ def test_run_prompts_for_sensitive_read(capsys, monkeypatch, tmp_path):
 
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "y"
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
 
     monkeypatch.setattr(
         "claude_afk.hooks.pretooluse.SlackBridge",

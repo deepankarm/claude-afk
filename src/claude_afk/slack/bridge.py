@@ -24,6 +24,11 @@ log = logging.getLogger("claude-afk.slack.bridge")
 _REACTION_ALLOW = {"+1", "thumbsup", "white_check_mark", "heavy_check_mark"}
 _REACTION_DENY = {"-1", "thumbsdown", "x", "no_entry_sign", "no_entry"}
 
+# Sentinel values returned by wait_for_reply() for reactions.
+# Distinct from any text a user could type.
+REPLY_ALLOW = "__REACTION_ALLOW__"
+REPLY_DENY = "__REACTION_DENY__"
+
 
 class SlackBridge:
     """Context manager for bidirectional Slack communication via DM.
@@ -194,9 +199,9 @@ class SlackBridge:
         reaction = event.get("reaction", "")
         if reaction in _REACTION_ALLOW:
             log.debug("reaction %s -> allow", reaction)
-            self._reply_text = "y"
+            self._reply_text = REPLY_ALLOW
             self._reply_event.set()
         elif reaction in _REACTION_DENY:
             log.debug("reaction %s -> deny", reaction)
-            self._reply_text = "n"
+            self._reply_text = REPLY_DENY
             self._reply_event.set()

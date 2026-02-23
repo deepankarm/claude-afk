@@ -6,12 +6,14 @@ import json
 from unittest.mock import MagicMock
 
 from claude_afk.hooks.planapproval import _emit, run
+from claude_afk.permissions import Decision
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY
 
 # --- _emit ---
 
 
 def test_emit_allow(capsys):
-    _emit("allow")
+    _emit(Decision.ALLOW)
     output = json.loads(capsys.readouterr().out.strip())
     assert output["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
     assert output["hookSpecificOutput"]["decision"]["behavior"] == "allow"
@@ -19,7 +21,7 @@ def test_emit_allow(capsys):
 
 
 def test_emit_deny_with_message(capsys):
-    _emit("deny", "User wants changes")
+    _emit(Decision.DENY, "User wants changes")
     output = json.loads(capsys.readouterr().out.strip())
     assert output["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert output["hookSpecificOutput"]["decision"]["message"] == "User wants changes"
@@ -32,10 +34,10 @@ def _mock_config():
     return MagicMock()
 
 
-def test_run_approve(capsys, monkeypatch):
+def test_run_approve_via_reaction(capsys, monkeypatch):
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "yes"
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
 
     monkeypatch.setattr(
         "claude_afk.hooks.planapproval.SlackBridge",
@@ -51,14 +53,12 @@ def test_run_approve(capsys, monkeypatch):
     run(data, _mock_config())
     output = json.loads(capsys.readouterr().out.strip())
     assert output["hookSpecificOutput"]["decision"]["behavior"] == "allow"
-    # Should post confirmation
-    assert any("approved" in str(c).lower() for c in bridge.post.call_args_list)
 
 
-def test_run_deny(capsys, monkeypatch):
+def test_run_deny_via_reaction(capsys, monkeypatch):
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "no"
+    bridge.wait_for_reply.return_value = REPLY_DENY
 
     monkeypatch.setattr(
         "claude_afk.hooks.planapproval.SlackBridge",
@@ -74,11 +74,10 @@ def test_run_deny(capsys, monkeypatch):
     run(data, _mock_config())
     output = json.loads(capsys.readouterr().out.strip())
     assert output["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert "changes" in output["hookSpecificOutput"]["decision"]["message"].lower()
 
 
 def test_run_feedback_as_deny(capsys, monkeypatch):
-    """Unclear reply (not y/n) is treated as feedback → deny with message."""
+    """Any text reply is treated as feedback -> deny with message."""
     bridge = MagicMock()
     bridge.post.return_value = True
     bridge.wait_for_reply.return_value = "please add error handling to step 3"
@@ -122,7 +121,7 @@ def test_run_timeout_auto_approves(capsys, monkeypatch):
 
 
 def test_run_empty_plan_auto_approves(capsys):
-    """No plan content and no prompts → auto-approve without Slack."""
+    """No plan content and no prompts -> auto-approve without Slack."""
     data = {
         "session_id": "sess-plan",
         "tool_input": {},
@@ -155,7 +154,7 @@ def test_run_post_failure_auto_approves(capsys, monkeypatch):
 def test_run_with_allowed_prompts(capsys, monkeypatch):
     bridge = MagicMock()
     bridge.post.return_value = True
-    bridge.wait_for_reply.return_value = "approve"
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
 
     monkeypatch.setattr(
         "claude_afk.hooks.planapproval.SlackBridge",

@@ -28,23 +28,10 @@ from claude_afk.permissions import (
     save_session_permission,
     tool_has_cc_rule,
 )
-from claude_afk.slack.bridge import SlackBridge
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY, SlackBridge
 from claude_afk.slack.formatting import format_single_question, format_tool_permission
 
 log = logging.getLogger("claude-afk.hooks.pretooluse")
-
-_ALLOW_WORDS = {"allow", "yes", "y", "approve", "ok", "lgtm", "go", "proceed", "sure", "yep"}
-_DENY_WORDS = {"deny", "no", "n", "reject", "block", "stop", "nope", "cancel"}
-
-
-def parse_permission_reply(text: str) -> Decision:
-    """Parse allow/deny from a Slack reply."""
-    normalized = text.strip().lower().rstrip("!.,")
-    if normalized in _ALLOW_WORDS:
-        return Decision.ALLOW
-    if normalized in _DENY_WORDS:
-        return Decision.DENY
-    return Decision.UNCLEAR
 
 
 def resolve_question_answer(reply: str, question: dict) -> str:
@@ -144,23 +131,19 @@ def _handle_permission(
     if reply is None:
         return
 
-    decision = parse_permission_reply(reply)
+    log.debug("permission reply=%r tool=%s", reply, tool_name)
 
-    log.debug("permission reply=%r decision=%s tool=%s", reply, decision, tool_name)
-
-    if decision == Decision.ALLOW:
+    if reply == REPLY_ALLOW:
         _emit(Decision.ALLOW, "Approved via Slack")
-    elif decision == Decision.DENY:
-        _emit(Decision.DENY, f"Denied via Slack: {reply}")
+        rule = build_session_rule(tool_name, tool_input)
+        if rule:
+            save_session_permission(session_id, rule, Decision.ALLOW)
+            log.debug("cached session permission: %s -> allow", rule)
+    elif reply == REPLY_DENY:
+        _emit(Decision.DENY, "Denied via Slack")
     else:
-        _emit(Decision.ALLOW, f"User said via Slack: {reply}")
-
-    # Cache the decision for cacheable tools (e.g. Edit, sensitive Reads)
-    effective = decision if decision != Decision.UNCLEAR else Decision.ALLOW
-    rule = build_session_rule(tool_name, tool_input)
-    if rule:
-        save_session_permission(session_id, rule, effective)
-        log.debug("cached session permission: %s -> %s", rule, effective)
+        # Any text reply → deny with the text as feedback
+        _emit(Decision.DENY, f"User feedback via Slack: {reply}")
 
 
 def _check_auto_allow(tool_name: str, tool_input: dict) -> bool:
@@ -207,10 +190,6 @@ def run(data: dict, config: SlackConfig) -> None:
         if cached == Decision.ALLOW:
             log.debug("tool %s matched session allow rule, auto-approving", tool_name)
             _emit(Decision.ALLOW, "Auto-approved from session cache")
-            return
-        if cached == Decision.DENY:
-            log.debug("tool %s matched session deny rule, auto-denying", tool_name)
-            _emit(Decision.DENY, "Auto-denied from session cache")
             return
 
         try:

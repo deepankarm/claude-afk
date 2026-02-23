@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from claude_afk.config import SlackConfig
-from claude_afk.slack.bridge import SlackBridge
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY, SlackBridge
 
 
 def _make_bridge(config: SlackConfig, session_id: str = "test-sess") -> SlackBridge:
@@ -127,7 +127,7 @@ def test_handle_reaction_thumbsup_allows():
     sm_client = MagicMock()
 
     bridge._handle_event(sm_client, req)
-    assert bridge._reply_text == "y"
+    assert bridge._reply_text == REPLY_ALLOW
     assert bridge._reply_event.is_set()
 
 
@@ -148,7 +148,7 @@ def test_handle_reaction_thumbsdown_denies():
     sm_client = MagicMock()
 
     bridge._handle_event(sm_client, req)
-    assert bridge._reply_text == "n"
+    assert bridge._reply_text == REPLY_DENY
     assert bridge._reply_event.is_set()
 
 
