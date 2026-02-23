@@ -20,6 +20,7 @@ DEFAULT_TIMEOUT = 300
 MAX_SLACK_TEXT = 3000
 
 AFK_HOME = Path(os.environ.get("CLAUDE_AFK_HOME", "~/.claude-afk")).expanduser()
+BRIDGE_LOCK_PATH = AFK_HOME / "bridge" / "sm.lock"
 
 log = logging.getLogger("claude-afk")
 
@@ -41,6 +42,7 @@ def ensure_home() -> None:
     AFK_HOME.mkdir(parents=True, exist_ok=True)
     (AFK_HOME / "slack" / "threads").mkdir(parents=True, exist_ok=True)
     (AFK_HOME / "logs").mkdir(parents=True, exist_ok=True)
+    (AFK_HOME / "bridge").mkdir(parents=True, exist_ok=True)
 
 
 @dataclass(frozen=True)

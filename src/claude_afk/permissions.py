@@ -77,8 +77,12 @@ def load_cc_permission_rules(cwd: str) -> list[str]:
     rules.extend(_load_json_permissions(os.path.join(config_dir, "settings.json")))
 
     if cwd:
-        rules.extend(_load_json_permissions(os.path.join(cwd, ".claude", "settings.local.json")))
-        rules.extend(_load_json_permissions(os.path.join(cwd, ".claude", "settings.json")))
+        rules.extend(
+            _load_json_permissions(os.path.join(cwd, ".claude", "settings.local.json"))
+        )
+        rules.extend(
+            _load_json_permissions(os.path.join(cwd, ".claude", "settings.json"))
+        )
 
     return rules
 
@@ -139,6 +143,10 @@ TOOL_POLICIES: dict[str, ToolPolicy] = {
     "WebFetch": ToolPolicy.ALWAYS_ASK,
     "WebSearch": ToolPolicy.ALWAYS_ASK,
     "NotebookEdit": ToolPolicy.ALWAYS_ASK,
+    "TaskCreate": ToolPolicy.AUTO_ALLOW,
+    "TaskUpdate": ToolPolicy.AUTO_ALLOW,
+    "TaskList": ToolPolicy.AUTO_ALLOW,
+    "TaskGet": ToolPolicy.AUTO_ALLOW,
 }
 
 # Files matching these patterns always prompt, even for auto_allow tools.
