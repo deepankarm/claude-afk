@@ -45,10 +45,10 @@ _TABLE_PATTERN = re.compile(
 
 _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
-PERMISSION_HINT = "\n:lock: _To proceed, reply *y* or *n*_"
+PERMISSION_HINT = "\n:lock: _Reply *y* / *n* or react with_ :thumbsup: / :thumbsdown:"
 PLAN_HINT = (
-    "\n:clipboard: _Reply *approve* to start coding,"
-    " or reply with feedback to revise the plan_"
+    "\n:clipboard: _Reply *approve* or react with_ :thumbsup: _to start coding,"
+    " _or reply with feedback to revise the plan_"
 )
 
 
