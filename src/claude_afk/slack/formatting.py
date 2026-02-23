@@ -45,10 +45,10 @@ _TABLE_PATTERN = re.compile(
 
 _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
-PERMISSION_HINT = "\n:lock: :thumbsup: _allow_ · :thumbsdown: _deny_ · _reply to redirect_"
+PERMISSION_HINT = "\n:thumbsup: _to allow_ · :thumbsdown: _to deny_ · _reply to provide feedback_"
 PLAN_HINT = (
-    "\n:clipboard: :thumbsup: _approve_ · :thumbsdown: _reject_"
-    " · _reply to revise the plan_"
+    "\n:thumbsup: _to approve_ · :thumbsdown: _to reject_"
+    " · _reply to provide feedback_"
 )
 
 
