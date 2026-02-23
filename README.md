@@ -40,14 +40,16 @@ pip install claude-afk
                 "bot": [
                     "chat:write",
                     "im:history",
-                    "im:write"
+                    "im:write",
+                    "reactions:read"
                 ]
             }
         },
         "settings": {
             "event_subscriptions": {
                 "bot_events": [
-                    "message.im"
+                    "message.im",
+                    "reaction_added"
                 ]
             },
             "interactivity": {
