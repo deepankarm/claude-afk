@@ -15,17 +15,16 @@ import logging
 import sys
 
 from claude_afk.config import SlackConfig, is_session_enabled, setup_logging
-from claude_afk.hooks.pretooluse import parse_permission_reply
 from claude_afk.permissions import Decision
-from claude_afk.slack.bridge import SlackBridge
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY, SlackBridge
 from claude_afk.slack.formatting import format_plan_approval
 
 log = logging.getLogger("claude-afk.hooks.planapproval")
 
 
-def _emit(behavior: str, message: str | None = None) -> None:
+def _emit(behavior: Decision, message: str | None = None) -> None:
     """Print a PermissionRequest hook response to stdout."""
-    decision: dict = {"behavior": behavior}
+    decision: dict = {"behavior": behavior.value}
     if message:
         decision["message"] = message
     result = {
@@ -46,7 +45,7 @@ def run(data: dict, config: SlackConfig) -> None:
 
     if not plan and not allowed_prompts:
         log.debug("no plan content or prompts, auto-approving")
-        _emit("allow")
+        _emit(Decision.ALLOW)
         return
 
     text = format_plan_approval(plan, allowed_prompts or None)
@@ -54,30 +53,24 @@ def run(data: dict, config: SlackConfig) -> None:
     with SlackBridge(config, session_id) as bridge:
         if not bridge.post(text):
             log.warning("failed to post plan to Slack, auto-approving")
-            _emit("allow")
+            _emit(Decision.ALLOW)
             return
 
         reply = bridge.wait_for_reply()
         if reply is None:
             log.debug("plan approval timed out, auto-approving")
-            _emit("allow")
+            _emit(Decision.ALLOW)
             return
 
-        decision = parse_permission_reply(reply)
-        log.debug("plan reply=%r decision=%s", reply, decision)
+        log.debug("plan reply=%r", reply)
 
-        if decision == Decision.DENY:
-            bridge.post(f":x: *Plan rejected.* Claude will revise.\n> {reply}")
-            _emit("deny", f"User requested changes via Slack: {reply}")
-        elif decision == Decision.ALLOW:
-            bridge.post(":white_check_mark: *Plan approved.* Starting work.")
-            _emit("allow")
+        if reply == REPLY_ALLOW:
+            _emit(Decision.ALLOW)
+        elif reply == REPLY_DENY:
+            _emit(Decision.DENY, "Plan rejected via Slack")
         else:
-            # Unclear reply → treat as feedback (deny with the reply text)
-            bridge.post(
-                f":speech_balloon: *Feedback sent.* Claude will revise.\n> {reply}"
-            )
-            _emit("deny", f"User feedback via Slack: {reply}")
+            # Any text reply → feedback, deny so Claude revises
+            _emit(Decision.DENY, f"User feedback via Slack: {reply}")
 
 
 def main() -> None:

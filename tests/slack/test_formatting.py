@@ -143,7 +143,7 @@ def test_format_plan_approval_basic():
     result = format_plan_approval("## Steps\n1. Do thing\n2. Do other thing")
     assert "plan" in result.lower()
     assert "Do thing" in result
-    assert "approve" in result.lower()
+    assert "thumbsup" in result
 
 
 def test_format_plan_approval_with_prompts():
@@ -161,7 +161,7 @@ def test_format_plan_approval_with_prompts():
 def test_format_plan_approval_empty_plan():
     result = format_plan_approval("")
     assert "plan" in result.lower()
-    assert "approve" in result.lower()
+    assert "thumbsup" in result
 
 
 def test_format_plan_approval_no_prompts():
