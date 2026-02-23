@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from claude_afk.slack.formatting import (
+    format_plan_approval,
     format_single_question,
     format_tool_permission,
     md_to_mrkdwn,
@@ -133,3 +134,37 @@ def test_format_single_question_multi_total():
     }
     result = format_single_question(q, 1, 3)
     assert "Question 1/3" in result
+
+
+# --- format_plan_approval ---
+
+
+def test_format_plan_approval_basic():
+    result = format_plan_approval("## Steps\n1. Do thing\n2. Do other thing")
+    assert "plan" in result.lower()
+    assert "Do thing" in result
+    assert "approve" in result.lower()
+
+
+def test_format_plan_approval_with_prompts():
+    prompts = [
+        {"tool": "Bash", "prompt": "run tests"},
+        {"tool": "Bash", "prompt": "install dependencies"},
+    ]
+    result = format_plan_approval("My plan", prompts)
+    assert "`Bash`" in result
+    assert "run tests" in result
+    assert "install dependencies" in result
+    assert "Requested permissions" in result
+
+
+def test_format_plan_approval_empty_plan():
+    result = format_plan_approval("")
+    assert "plan" in result.lower()
+    assert "approve" in result.lower()
+
+
+def test_format_plan_approval_no_prompts():
+    result = format_plan_approval("Simple plan")
+    assert "Simple plan" in result
+    assert "Requested permissions" not in result

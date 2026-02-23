@@ -242,6 +242,7 @@ def test_install_hooks(tmp_path):
     assert "PreToolUse" in hooks
     assert "Stop" in hooks
     assert "Notification" in hooks
+    assert "PermissionRequest" in hooks
     # Verify the command contains claude-afk
     cmds = [
         h["command"]
@@ -249,6 +250,10 @@ def test_install_hooks(tmp_path):
         for h in entry.get("hooks", [])
     ]
     assert any("claude-afk" in c for c in cmds)
+    # PermissionRequest should target ExitPlanMode
+    pr_entry = hooks["PermissionRequest"][0]
+    assert pr_entry["matcher"] == "ExitPlanMode"
+    assert pr_entry["hooks"][0]["timeout"] == 1800
 
 
 def test_install_hooks_idempotent(tmp_path):

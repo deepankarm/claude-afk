@@ -46,6 +46,10 @@ _TABLE_PATTERN = re.compile(
 _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
 PERMISSION_HINT = "\n:lock: _To proceed, reply *y* or *n*_"
+PLAN_HINT = (
+    "\n:clipboard: _Reply *approve* to start coding,"
+    " or reply with feedback to revise the plan_"
+)
 
 
 def truncate(text: str, limit: int = MAX_SLACK_TEXT) -> str:
@@ -157,4 +161,28 @@ def format_single_question(q: dict, question_num: int, total: int) -> str:
     else:
         parts.append("\n_Reply with a number or your own answer_")
 
+    return truncate("\n".join(parts))
+
+
+def format_plan_approval(plan: str, allowed_prompts: list[dict] | None = None) -> str:
+    """Format a plan approval prompt for Slack.
+
+    Args:
+        plan: The plan markdown content from ExitPlanMode.
+        allowed_prompts: Optional list of permission prompts the plan requests.
+    """
+    parts: list[str] = [":memo: *Claude has a plan — ready to code?*\n"]
+
+    if plan:
+        plan_mrkdwn = md_to_mrkdwn(plan)
+        parts.append(plan_mrkdwn)
+
+    if allowed_prompts:
+        parts.append("\n*Requested permissions:*")
+        for p in allowed_prompts:
+            tool = p.get("tool", "")
+            prompt = p.get("prompt", "")
+            parts.append(f"• `{tool}` — {prompt}")
+
+    parts.append(PLAN_HINT)
     return truncate("\n".join(parts))
