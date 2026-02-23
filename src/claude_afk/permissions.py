@@ -147,6 +147,7 @@ TOOL_POLICIES: dict[str, ToolPolicy] = {
     "TaskUpdate": ToolPolicy.AUTO_ALLOW,
     "TaskList": ToolPolicy.AUTO_ALLOW,
     "TaskGet": ToolPolicy.AUTO_ALLOW,
+    "Skill": ToolPolicy.AUTO_ALLOW,
 }
 
 # Files matching these patterns always prompt, even for auto_allow tools.
