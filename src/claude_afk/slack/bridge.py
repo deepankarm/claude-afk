@@ -20,6 +20,10 @@ from claude_afk.slack import thread as thread_state
 
 log = logging.getLogger("claude-afk.slack.bridge")
 
+# Emoji reactions mapped to allow/deny - lets users react instead of typing.
+_REACTION_ALLOW = {"+1", "thumbsup", "white_check_mark", "heavy_check_mark"}
+_REACTION_DENY = {"-1", "thumbsdown", "x", "no_entry_sign", "no_entry"}
+
 
 class SlackBridge:
     """Context manager for bidirectional Slack communication via DM.
@@ -128,11 +132,14 @@ class SlackBridge:
             return
 
         event = req.payload.get("event", {})
+        event_type = event.get("type")
+
         is_thread_reply = (
-            event.get("type") == "message"
+            event_type == "message"
             and not event.get("subtype")
             and event.get("thread_ts")
         )
+        is_reaction = event_type == "reaction_added"
 
         # Don't ack thread replies meant for another session — Slack will
         # retry delivery to the connection that owns that thread.
@@ -142,8 +149,13 @@ class SlackBridge:
         # Everything else is ours or irrelevant — ack it
         sm_client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id))
 
-        if not is_thread_reply:
-            return
+        if is_thread_reply:
+            self._handle_thread_reply(event)
+        elif is_reaction:
+            self._handle_reaction(event)
+
+    def _handle_thread_reply(self, event: dict) -> None:
+        """Process a validated thread reply."""
         if event.get("channel") != self._config.dm_channel_id:
             return
         if event.get("bot_id"):
@@ -157,8 +169,34 @@ class SlackBridge:
         # Ignore stale messages sent before the bot's latest post
         msg_ts = event.get("ts", "")
         if self._last_post_ts and msg_ts <= self._last_post_ts:
-            log.debug("ignoring stale message ts=%s (bot posted at %s)", msg_ts, self._last_post_ts)
+            log.debug(
+                "ignoring stale message ts=%s (bot posted at %s)", msg_ts, self._last_post_ts
+            )
             return
 
         self._reply_text = event.get("text", "")
         self._reply_event.set()
+
+    def _handle_reaction(self, event: dict) -> None:
+        """Process an emoji reaction on our last posted message."""
+        item = event.get("item", {})
+
+        # Only reactions on our last posted message
+        if item.get("channel") != self._config.dm_channel_id:
+            return
+        if not self._last_post_ts or item.get("ts") != self._last_post_ts:
+            return
+
+        # Verify user
+        if self._config.user_id and event.get("user") != self._config.user_id:
+            return
+
+        reaction = event.get("reaction", "")
+        if reaction in _REACTION_ALLOW:
+            log.debug("reaction %s -> allow", reaction)
+            self._reply_text = "y"
+            self._reply_event.set()
+        elif reaction in _REACTION_DENY:
+            log.debug("reaction %s -> deny", reaction)
+            self._reply_text = "n"
+            self._reply_event.set()
