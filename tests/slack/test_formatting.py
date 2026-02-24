@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from claude_afk.slack.formatting import (
+    format_bash_prefix_hint,
     format_plan_approval,
     format_single_question,
     format_tool_permission,
@@ -65,8 +66,10 @@ def test_format_tool_permission_bash():
     assert "`Bash`" in result
     assert "npm test" in result
     assert "Run tests" in result
-    assert "y" in result
-    assert "n" in result
+    assert "allow" in result
+    assert "deny" in result
+    assert "───" in result
+    assert "reply with feedback" in result
 
 
 def test_format_tool_permission_edit():
@@ -168,3 +171,49 @@ def test_format_plan_approval_no_prompts():
     result = format_plan_approval("Simple plan")
     assert "Simple plan" in result
     assert "Requested permissions" not in result
+
+
+# --- format_bash_prefix_hint ---
+
+
+def test_format_bash_prefix_hint():
+    result = format_bash_prefix_hint(["git log", "grep"])
+    assert "`git log`" in result
+    assert "`grep`" in result
+    assert "fast_forward" in result
+
+
+def test_format_bash_prefix_hint_single():
+    result = format_bash_prefix_hint(["head"])
+    assert "`head`" in result
+
+
+# --- format_tool_permission with prefix hints ---
+
+
+def test_format_tool_permission_bash_with_prefixes():
+    result = format_tool_permission(
+        "Bash",
+        {"command": "git log --oneline | head -5"},
+        unapproved_prefixes=["git log", "head"],
+    )
+    assert "`Bash`" in result
+    assert "git log --oneline" in result
+    assert "fast_forward" in result
+    assert "`git log`" in result
+    assert "`head`" in result
+
+
+def test_format_tool_permission_bash_without_prefixes():
+    result = format_tool_permission("Bash", {"command": "ls -la"})
+    assert "`Bash`" in result
+    assert "fast_forward" not in result
+
+
+def test_format_tool_permission_non_bash_ignores_prefixes():
+    result = format_tool_permission(
+        "Write",
+        {"file_path": "/tmp/f.py", "content": "x"},
+        unapproved_prefixes=["something"],
+    )
+    assert "fast_forward" not in result

@@ -45,11 +45,8 @@ _TABLE_PATTERN = re.compile(
 
 _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
-PERMISSION_HINT = "\n:thumbsup: _to allow_ · :thumbsdown: _to deny_ · _reply to provide feedback_"
-PLAN_HINT = (
-    "\n:thumbsup: _to approve_ · :thumbsdown: _to reject_"
-    " · _reply to provide feedback_"
-)
+PERMISSION_HINT = "\n───\n:thumbsup: allow · :thumbsdown: deny\n_or reply with feedback_"
+PLAN_HINT = "\n───\n:thumbsup: approve · :thumbsdown: reject\n_or reply with feedback_"
 
 
 def truncate(text: str, limit: int = MAX_SLACK_TEXT) -> str:
@@ -89,7 +86,17 @@ def md_to_mrkdwn(text: str) -> str:
     return "".join(result)
 
 
-def format_tool_permission(tool_name: str, tool_input: dict) -> str:
+def format_bash_prefix_hint(unapproved_prefixes: list[str]) -> str:
+    """Format the 'always allow' hint showing unapproved Bash prefixes."""
+    prefix_codes = " ".join(f"`{p}`" for p in unapproved_prefixes)
+    return f" · :fast_forward: always allow {prefix_codes}"
+
+
+def format_tool_permission(
+    tool_name: str,
+    tool_input: dict,
+    unapproved_prefixes: list[str] | None = None,
+) -> str:
     """Format a tool call as a Slack permission prompt."""
     if tool_name == "Bash":
         cmd = tool_input.get("command", "")
@@ -125,7 +132,13 @@ def format_tool_permission(tool_name: str, tool_input: dict) -> str:
         text = f"Tool: `{tool_name}`\n"
         text += f"```\n{input_str}\n```"
 
-    text += PERMISSION_HINT
+    if unapproved_prefixes and tool_name == "Bash":
+        prefix_hint = format_bash_prefix_hint(unapproved_prefixes)
+        # Insert fast_forward hint inline on the reactions line
+        text += "\n───\n:thumbsup: allow · :thumbsdown: deny" + prefix_hint
+        text += "\n_or reply with feedback_"
+    else:
+        text += PERMISSION_HINT
     return truncate(text)
 
 

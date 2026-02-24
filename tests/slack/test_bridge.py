@@ -6,7 +6,7 @@ import fcntl
 from unittest.mock import MagicMock, patch
 
 from claude_afk.config import SlackConfig
-from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY, SlackBridge
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_ALWAYS_ALLOW, REPLY_DENY, SlackBridge
 
 
 def _make_bridge(config: SlackConfig, session_id: str = "test-sess") -> SlackBridge:
@@ -476,3 +476,42 @@ def test_wait_for_reply_poll_finds_reply():
 
     result = bridge.wait_for_reply()
     assert result == "looks good"
+
+
+# --- Always-allow reaction (fast_forward) ---
+
+
+def test_handle_reaction_fast_forward_always_allows():
+    bridge = _make_bridge(_CFG)
+    bridge._last_post_ts = "msg-ts-001"
+
+    event = {
+        "type": "reaction_added",
+        "user": "U123",
+        "reaction": "fast_forward",
+        "item": {"type": "message", "channel": "D456", "ts": "msg-ts-001"},
+    }
+    req = _make_request(event)
+    sm_client = MagicMock()
+
+    bridge._handle_event(sm_client, req)
+    assert bridge._reply_text == REPLY_ALWAYS_ALLOW
+    assert bridge._reply_event.is_set()
+
+
+def test_poll_reactions_finds_always_allow():
+    bridge = _make_bridge(_CFG)
+    bridge._last_post_ts = "msg-ts-001"
+
+    bridge._web_client = MagicMock()
+    bridge._web_client.reactions_get.return_value = {
+        "ok": True,
+        "message": {
+            "reactions": [
+                {"name": "fast_forward", "users": ["U123"], "count": 1},
+            ],
+        },
+    }
+
+    result = bridge._poll_reactions()
+    assert result == REPLY_ALWAYS_ALLOW
