@@ -9,10 +9,12 @@ from claude_afk.permissions import (
     Decision,
     ToolPolicy,
     build_session_rule,
+    check_bash_prefixes,
     check_session_permission,
     get_tool_input_value,
     is_sensitive_path,
     load_cc_permission_rules,
+    save_bash_prefixes,
     save_session_permission,
     tool_has_cc_rule,
 )
@@ -242,3 +244,69 @@ def test_deny_takes_precedence_over_allow(tmp_path, monkeypatch):
     # Deny checked first, takes precedence
     result = check_session_permission("sess-1", "Edit", {"file_path": "/tmp/main.py"})
     assert result == Decision.DENY
+
+
+# --- save_bash_prefixes / check_bash_prefixes ---
+
+
+def test_save_and_check_bash_prefixes_all_approved(tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    save_bash_prefixes("sess-bp", ["git log", "grep"])
+
+    all_ok, approved, unapproved = check_bash_prefixes("sess-bp", "git log --oneline | grep foo")
+    assert all_ok is True
+    assert approved == ["git log", "grep"]
+    assert unapproved == []
+
+
+def test_check_bash_prefixes_partial(tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    save_bash_prefixes("sess-bp", ["git log"])
+
+    all_ok, approved, unapproved = check_bash_prefixes("sess-bp", "git log --oneline | head -5")
+    assert all_ok is False
+    assert approved == ["git log"]
+    assert unapproved == ["head"]
+
+
+def test_check_bash_prefixes_none_approved(tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    all_ok, approved, unapproved = check_bash_prefixes("sess-bp", "git log --oneline")
+    assert all_ok is False
+    assert approved == []
+    assert unapproved == ["git log"]
+
+
+def test_save_bash_prefixes_no_duplicates(tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    save_bash_prefixes("sess-bp", ["git log", "grep"])
+    save_bash_prefixes("sess-bp", ["git log", "head"])
+
+    path = tmp_path / "sessions" / "sess-bp" / "permissions.json"
+    data = json.loads(path.read_text())
+    assert data["bash_prefixes"].count("git log") == 1
+    assert "grep" in data["bash_prefixes"]
+    assert "head" in data["bash_prefixes"]
+
+
+def test_check_bash_prefixes_empty_command(tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    all_ok, approved, unapproved = check_bash_prefixes("sess-bp", "")
+    assert all_ok is True
+    assert approved == []
+    assert unapproved == []

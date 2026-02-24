@@ -30,11 +30,16 @@ log = logging.getLogger("claude-afk.slack.bridge")
 # Emoji reactions mapped to allow/deny - lets users react instead of typing.
 _REACTION_ALLOW = {"+1", "thumbsup", "white_check_mark", "heavy_check_mark"}
 _REACTION_DENY = {"-1", "thumbsdown", "x", "no_entry_sign", "no_entry"}
+_REACTION_ALWAYS_ALLOW = {
+    "fast_forward",
+    "black_right_pointing_double_triangle_with_vertical_bar",
+}
 
 # Sentinel values returned by wait_for_reply() for reactions.
 # Distinct from any text a user could type.
 REPLY_ALLOW = "__REACTION_ALLOW__"
 REPLY_DENY = "__REACTION_DENY__"
+REPLY_ALWAYS_ALLOW = "__REACTION_ALWAYS_ALLOW__"
 
 
 class SlackBridge:
@@ -269,6 +274,10 @@ class SlackBridge:
             log.debug("reaction %s -> deny", reaction)
             self._reply_text = REPLY_DENY
             self._reply_event.set()
+        elif reaction in _REACTION_ALWAYS_ALLOW:
+            log.debug("reaction %s -> always_allow", reaction)
+            self._reply_text = REPLY_ALWAYS_ALLOW
+            self._reply_event.set()
 
     # -- Poll-based waiting (fallback when SM lock is held) --
 
@@ -362,5 +371,7 @@ class SlackBridge:
                 return REPLY_ALLOW
             if name in _REACTION_DENY:
                 return REPLY_DENY
+            if name in _REACTION_ALWAYS_ALLOW:
+                return REPLY_ALWAYS_ALLOW
 
         return None

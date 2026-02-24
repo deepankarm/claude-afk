@@ -21,14 +21,17 @@ from claude_afk.permissions import (
     Decision,
     ToolPolicy,
     build_session_rule,
+    check_bash_prefixes,
     check_session_permission,
     get_tool_input_value,
     is_sensitive_path,
     load_cc_permission_rules,
+    save_bash_prefixes,
     save_session_permission,
     tool_has_cc_rule,
 )
-from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY, SlackBridge
+from claude_afk.shell import extract_command_prefixes
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_ALWAYS_ALLOW, REPLY_DENY, SlackBridge
 from claude_afk.slack.formatting import format_single_question, format_tool_permission
 
 log = logging.getLogger("claude-afk.hooks.pretooluse")
@@ -121,9 +124,11 @@ def _handle_permission(
     tool_name: str,
     tool_input: dict,
     session_id: str,
+    unapproved_prefixes: list[str] | None = None,
+    all_prefixes: list[str] | None = None,
 ) -> None:
     """Post permission prompt, wait for allow/deny reply."""
-    text = format_tool_permission(tool_name, tool_input)
+    text = format_tool_permission(tool_name, tool_input, unapproved_prefixes)
     if not bridge.post(text):
         return
 
@@ -139,6 +144,12 @@ def _handle_permission(
         if rule:
             save_session_permission(session_id, rule, Decision.ALLOW)
             log.debug("cached session permission: %s -> allow", rule)
+    elif reply == REPLY_ALWAYS_ALLOW:
+        prefixes = all_prefixes or []
+        if prefixes:
+            save_bash_prefixes(session_id, prefixes)
+            log.debug("saved bash prefixes: %s", prefixes)
+        _emit(Decision.ALLOW, f"Always-allowed via Slack (prefixes: {prefixes})")
     elif reply == REPLY_DENY:
         _emit(Decision.DENY, "Denied via Slack")
     else:
@@ -192,12 +203,31 @@ def run(data: dict, config: SlackConfig) -> None:
             _emit(Decision.ALLOW, "Auto-approved from session cache")
             return
 
+        # Bash prefix auto-approval: check if all sub-command prefixes
+        # are already approved for this session.
+        unapproved_prefixes: list[str] | None = None
+        all_prefixes: list[str] | None = None
+        if not is_ask and tool_name == "Bash":
+            command = tool_input.get("command", "")
+            all_approved, _approved, unapproved = check_bash_prefixes(session_id, command)
+            if all_approved and _approved:
+                log.debug("all bash prefixes approved, auto-allowing: %s", _approved)
+                _emit(Decision.ALLOW, f"Auto-allowed (all prefixes approved: {_approved})")
+                return
+            if unapproved:
+                unapproved_prefixes = unapproved
+                all_prefixes = extract_command_prefixes(command)
+                log.debug("unapproved prefixes: %s", unapproved_prefixes)
+
         try:
             with SlackBridge(config, session_id) as bridge:
                 if is_ask:
                     _handle_ask_user_question(bridge, questions)
                 else:
-                    _handle_permission(bridge, tool_name, tool_input, session_id)
+                    _handle_permission(
+                        bridge, tool_name, tool_input, session_id,
+                        unapproved_prefixes, all_prefixes,
+                    )
         finally:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
             log.debug("lock released")

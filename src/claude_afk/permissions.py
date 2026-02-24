@@ -17,6 +17,7 @@ from enum import Enum
 from pathlib import Path
 
 from claude_afk.config import AFK_HOME
+from claude_afk.shell import extract_command_prefixes
 
 
 class ToolPolicy(str, Enum):
@@ -248,6 +249,58 @@ def save_session_permission(session_id: str, rule: str, decision: Decision) -> N
     lst = perms.setdefault(decision, [])
     if rule not in lst:
         lst.append(rule)
+
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+
+
+# ── Bash command prefix auto-approval ─────────────────────────────
+
+
+def check_bash_prefixes(
+    session_id: str, command: str
+) -> tuple[bool, list[str], list[str]]:
+    """Check if all command prefixes are already approved for this session.
+
+    Returns ``(all_approved, approved, unapproved)``.
+    """
+    prefixes = extract_command_prefixes(command)
+    if not prefixes:
+        return True, [], []
+
+    path = _session_permissions_path(session_id)
+    saved: list[str] = []
+    if path.exists():
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            saved = data.get("bash_prefixes", [])
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    approved = [p for p in prefixes if p in saved]
+    unapproved = [p for p in prefixes if p not in saved]
+    return len(unapproved) == 0, approved, unapproved
+
+
+def save_bash_prefixes(session_id: str, prefixes: list[str]) -> None:
+    """Save approved Bash command prefixes to the session permission cache."""
+    path = _session_permissions_path(session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    data: dict = {"permissions": {"allow": [], "deny": []}}
+    if path.exists():
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    saved = data.setdefault("bash_prefixes", [])
+    for p in prefixes:
+        if p not in saved:
+            saved.append(p)
 
     with open(path, "w") as f:
         json.dump(data, f, indent=2)

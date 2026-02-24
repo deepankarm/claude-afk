@@ -12,7 +12,7 @@ from claude_afk.hooks.pretooluse import (
     resolve_question_answer,
     run,
 )
-from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_DENY
+from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_ALWAYS_ALLOW, REPLY_DENY
 
 # --- resolve_question_answer ---
 
@@ -251,3 +251,105 @@ def test_run_prompts_for_sensitive_read(capsys, monkeypatch, tmp_path):
     assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
     # Should have posted to Slack (not auto-allowed)
     bridge.post.assert_called_once()
+
+
+# --- Always-allow saves bash prefixes ---
+
+
+def test_handle_permission_always_allow_saves_prefixes(capsys, tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    bridge.wait_for_reply.return_value = REPLY_ALWAYS_ALLOW
+
+    _handle_permission(
+        bridge,
+        "Bash",
+        {"command": "git log --oneline | head -5"},
+        "sess-aa",
+        unapproved_prefixes=["git log", "head"],
+        all_prefixes=["git log", "head"],
+    )
+    output = json.loads(capsys.readouterr().out.strip())
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "Always-allowed" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+    # Verify prefixes were saved
+    path = tmp_path / "sessions" / "sess-aa" / "permissions.json"
+    data = json.loads(path.read_text())
+    assert "git log" in data["bash_prefixes"]
+    assert "head" in data["bash_prefixes"]
+
+
+def test_handle_permission_thumbsup_does_not_save_prefixes(capsys, tmp_path, monkeypatch):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
+
+    _handle_permission(
+        bridge,
+        "Bash",
+        {"command": "git log --oneline"},
+        "sess-no-save",
+        unapproved_prefixes=["git log"],
+        all_prefixes=["git log"],
+    )
+    output = json.loads(capsys.readouterr().out.strip())
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    # No bash_prefixes should be saved for thumbsup
+    path = tmp_path / "sessions" / "sess-no-save" / "permissions.json"
+    assert not path.exists()
+
+
+# --- run() bash prefix auto-approval ---
+
+
+def test_run_auto_allows_when_all_prefixes_approved(capsys, monkeypatch, tmp_path):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+    monkeypatch.setattr("claude_afk.hooks.pretooluse.load_cc_permission_rules", lambda cwd: [])
+
+    # Pre-save prefixes
+    perms.save_bash_prefixes("sess-prefix", ["git log", "head"])
+
+    data = _make_data("Bash", {"command": "git log --oneline | head -20"}, "sess-prefix")
+    run(data, _mock_config())
+    output = json.loads(capsys.readouterr().out.strip())
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert "all prefixes approved" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_run_prompts_with_unapproved_prefixes(capsys, monkeypatch, tmp_path):
+    import claude_afk.permissions as perms
+
+    monkeypatch.setattr(perms, "AFK_HOME", tmp_path)
+    monkeypatch.setattr("claude_afk.hooks.pretooluse.load_cc_permission_rules", lambda cwd: [])
+
+    # Only approve "git log", not "head"
+    perms.save_bash_prefixes("sess-partial", ["git log"])
+
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    bridge.wait_for_reply.return_value = REPLY_ALLOW
+
+    monkeypatch.setattr(
+        "claude_afk.hooks.pretooluse.SlackBridge",
+        lambda config, sid: MagicMock(__enter__=lambda s: bridge, __exit__=lambda *a: None),
+    )
+
+    data = _make_data("Bash", {"command": "git log --oneline | head -5"}, "sess-partial")
+    run(data, _mock_config())
+
+    # Should have posted to Slack with prefix hint
+    posted_text = bridge.post.call_args[0][0]
+    assert "`head`" in posted_text
+    assert "fast_forward" in posted_text
