@@ -1,6 +1,6 @@
 [project]
 name = "claude-afk"
-version = "0.1.0"
+version = "0.1.1"
 description = "Control Claude Code remotely via Slack — approve permissions, answer questions, and continue sessions while AFK"
 requires-python = ">=3.10"
 license = "Apache-2.0"
