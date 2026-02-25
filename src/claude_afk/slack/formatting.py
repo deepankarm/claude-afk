@@ -45,11 +45,19 @@ _TABLE_PATTERN = re.compile(
 
 _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
-PERMISSION_HINT = "\n───\n:thumbsup: allow · :thumbsdown: deny\n_or reply with feedback_"
+PERMISSION_HINT = (
+    "\n───\n:thumbsup: allow · :thumbsdown: deny\n_or reply with feedback_"
+)
 PLAN_HINT = "\n───\n:thumbsup: approve · :thumbsdown: reject\n_or reply with feedback_"
 
 
 def truncate(text: str, limit: int = MAX_SLACK_TEXT) -> str:
+    """Truncate *text* to *limit* characters.
+
+    Note: this is now mainly a safety net.  The bridge layer handles
+    long messages by uploading them as snippets, so formatters should
+    generally pass through full text.
+    """
     if len(text) <= limit:
         return text
     return text[: limit - 3] + "..."
@@ -139,7 +147,7 @@ def format_tool_permission(
         text += "\n_or reply with feedback_"
     else:
         text += PERMISSION_HINT
-    return truncate(text)
+    return text
 
 
 def format_single_question(q: dict, question_num: int, total: int) -> str:
@@ -174,7 +182,7 @@ def format_single_question(q: dict, question_num: int, total: int) -> str:
     else:
         parts.append("\n_Reply with a number or your own answer_")
 
-    return truncate("\n".join(parts))
+    return "\n".join(parts)
 
 
 def format_plan_approval(plan: str, allowed_prompts: list[dict] | None = None) -> str:
@@ -198,4 +206,4 @@ def format_plan_approval(plan: str, allowed_prompts: list[dict] | None = None) -
             parts.append(f"• `{tool}` — {prompt}")
 
     parts.append(PLAN_HINT)
-    return truncate("\n".join(parts))
+    return "\n".join(parts)
