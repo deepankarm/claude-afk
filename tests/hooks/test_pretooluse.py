@@ -353,3 +353,94 @@ def test_run_prompts_with_unapproved_prefixes(capsys, monkeypatch, tmp_path):
     posted_text = bridge.post.call_args[0][0]
     assert "`head`" in posted_text
     assert "fast_forward" in posted_text
+
+
+# --- Timeout retry loop ---
+
+
+def test_handle_permission_retries_on_timeout(capsys):
+    """On timeout (None reply), posts reminder and keeps waiting."""
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    # First call times out, second returns allow
+    bridge.wait_for_reply.side_effect = [None, REPLY_ALLOW]
+
+    _handle_permission(bridge, "Bash", {"command": "ls"}, "sess-retry")
+    output = json.loads(capsys.readouterr().out.strip())
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+
+    # Should have posted: original prompt + reminder
+    assert bridge.post.call_count == 2
+    reminder_text = bridge.post.call_args_list[1][0][0]
+    assert "Still waiting" in reminder_text
+
+
+def test_handle_permission_retries_multiple_timeouts(capsys):
+    """Retries multiple times before user finally responds."""
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    bridge.wait_for_reply.side_effect = [None, None, None, REPLY_DENY]
+
+    _handle_permission(bridge, "Bash", {"command": "rm -rf /"}, "sess-retry")
+    output = json.loads(capsys.readouterr().out.strip())
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    # 1 original + 3 reminders
+    assert bridge.post.call_count == 4
+
+
+def test_handle_permission_stops_retrying_if_post_fails(capsys):
+    """If reminder post fails, gives up (returns without emit)."""
+    bridge = MagicMock()
+    # First post (prompt) succeeds, second post (reminder) fails
+    bridge.post.side_effect = [True, False]
+    bridge.wait_for_reply.return_value = None
+
+    _handle_permission(bridge, "Bash", {"command": "ls"}, "sess-retry")
+    # No output emitted — post failed
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_handle_ask_user_question_retries_on_timeout(capsys):
+    """Question handler retries on timeout with a reminder."""
+    bridge = MagicMock()
+    bridge.post.return_value = True
+    # First wait times out, second returns answer
+    bridge.wait_for_reply.side_effect = [None, "1"]
+
+    questions = [
+        {
+            "question": "Pick one?",
+            "header": "Choice",
+            "options": [{"label": "A"}, {"label": "B"}],
+            "multiSelect": False,
+        }
+    ]
+    _handle_ask_user_question(bridge, questions)
+    output = json.loads(capsys.readouterr().out.strip())
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "A" in output["hookSpecificOutput"]["permissionDecisionReason"]
+
+    # 1 question + 1 reminder + 1 confirmation
+    assert bridge.post.call_count == 3
+    reminder_text = bridge.post.call_args_list[1][0][0]
+    assert "Still waiting" in reminder_text
+
+
+def test_handle_ask_user_question_stops_if_reminder_fails(capsys):
+    """If question reminder post fails, gives up."""
+    bridge = MagicMock()
+    # First post (question) succeeds, second post (reminder) fails
+    bridge.post.side_effect = [True, False]
+    bridge.wait_for_reply.return_value = None
+
+    questions = [
+        {
+            "question": "Pick one?",
+            "header": "Choice",
+            "options": [{"label": "A"}],
+            "multiSelect": False,
+        }
+    ]
+    _handle_ask_user_question(bridge, questions)
+    assert capsys.readouterr().out.strip() == ""
