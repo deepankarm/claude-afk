@@ -16,8 +16,8 @@ import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_TIMEOUT = 300
-MAX_SLACK_TEXT = 3000
+DEFAULT_TIMEOUT = 1800  # 30 minutes — generous for AFK usage
+MAX_SLACK_TEXT = 4000
 
 AFK_HOME = Path(os.environ.get("CLAUDE_AFK_HOME", "~/.claude-afk")).expanduser()
 BRIDGE_LOCK_PATH = AFK_HOME / "bridge" / "sm.lock"

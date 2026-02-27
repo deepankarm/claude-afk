@@ -22,7 +22,7 @@ from slack_sdk.socket_mode import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 
-from claude_afk.config import SlackConfig
+from claude_afk.config import MAX_SLACK_TEXT, SlackConfig
 from claude_afk.slack import thread as thread_state
 
 log = logging.getLogger("claude-afk.slack.bridge")
@@ -130,6 +130,10 @@ class SlackBridge:
     def post(self, text: str, header: str | None = None) -> bool:
         """Post a message to the DM, creating or continuing a thread.
 
+        If *text* exceeds :data:`MAX_SLACK_TEXT`, the body is uploaded as a
+        text snippet and a short action-hint is posted as a regular message
+        so the user can still react to it.
+
         Args:
             text: The message body.
             header: Optional header prepended to the first message in a new thread.
@@ -140,6 +144,9 @@ class SlackBridge:
         if self._needs_header and header:
             text = header + "\n\n" + text
             self._needs_header = False
+
+        if len(text) > MAX_SLACK_TEXT:
+            return self._post_as_snippet(text)
 
         kwargs: dict = {"channel": self._config.dm_channel_id, "text": text}
         if self.thread_ts:
@@ -154,6 +161,94 @@ class SlackBridge:
             self.thread_ts = resp.get("ts")
             log.debug("new thread started ts=%s", self.thread_ts)
 
+        self._last_post_ts = resp.get("ts")
+        thread_state.save(self._session_id, self.thread_ts)
+        return True
+
+    def _post_as_snippet(self, text: str) -> bool:
+        """Upload long content as a text snippet, then post the action hint.
+
+        Splits *text* on the ``───`` divider.  Everything before it becomes
+        the snippet; the divider and everything after it is posted as a
+        normal follow-up message so the user can react to the hint.
+        """
+        divider = "───"
+        if divider in text:
+            idx = text.index(divider)
+            body = text[:idx].rstrip()
+            hint = text[idx:]
+        else:
+            body = text
+            hint = None
+
+        # Ensure thread exists before uploading the snippet
+        if not self.thread_ts:
+            resp = self._web_client.chat_postMessage(
+                channel=self._config.dm_channel_id,
+                text="…",
+            )
+            if not resp.get("ok"):
+                log.warning("chat_postMessage (thread init) failed: %s", resp.get("error"))
+                return False
+            self.thread_ts = resp.get("ts")
+            thread_state.save(self._session_id, self.thread_ts)
+            log.debug("new thread started ts=%s", self.thread_ts)
+
+        # Upload the body as a text snippet in the thread
+        try:
+            self._web_client.files_upload_v2(
+                channel=self._config.dm_channel_id,
+                thread_ts=self.thread_ts,
+                content=body,
+                filename="message.txt",
+                title="Full message",
+            )
+            log.debug("uploaded snippet (%d chars) to thread %s", len(body), self.thread_ts)
+        except Exception:
+            log.warning("files_upload_v2 failed, falling back to truncated post", exc_info=True)
+            # Fall back to truncated text
+            return self._post_truncated(text)
+
+        # Post the action hint as a regular message so user can react to it
+        if hint:
+            resp = self._web_client.chat_postMessage(
+                channel=self._config.dm_channel_id,
+                thread_ts=self.thread_ts,
+                text=hint,
+            )
+            if not resp.get("ok"):
+                log.warning("chat_postMessage (hint) failed: %s", resp.get("error"))
+                return False
+            self._last_post_ts = resp.get("ts")
+        else:
+            # No hint — snippet is the last thing posted, but we can't
+            # react to a file upload, so post a minimal action message
+            resp = self._web_client.chat_postMessage(
+                channel=self._config.dm_channel_id,
+                thread_ts=self.thread_ts,
+                text="───\n:thumbsup: allow · :thumbsdown: deny\n_or reply with feedback_",
+            )
+            if not resp.get("ok"):
+                log.warning("chat_postMessage (fallback hint) failed: %s", resp.get("error"))
+                return False
+            self._last_post_ts = resp.get("ts")
+
+        return True
+
+    def _post_truncated(self, text: str) -> bool:
+        """Post a truncated version of *text* as a last resort."""
+        truncated = text[: MAX_SLACK_TEXT - 3] + "..."
+        kwargs: dict = {"channel": self._config.dm_channel_id, "text": truncated}
+        if self.thread_ts:
+            kwargs["thread_ts"] = self.thread_ts
+
+        resp = self._web_client.chat_postMessage(**kwargs)
+        if not resp.get("ok"):
+            log.warning("chat_postMessage (truncated) failed: %s", resp.get("error"))
+            return False
+
+        if not self.thread_ts:
+            self.thread_ts = resp.get("ts")
         self._last_post_ts = resp.get("ts")
         thread_state.save(self._session_id, self.thread_ts)
         return True

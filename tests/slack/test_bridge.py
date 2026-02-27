@@ -216,6 +216,66 @@ def test_post_creates_thread(mock_thread_state):
     mock_thread_state.save.assert_called_once_with("test-sess", "new-ts-123")
 
 
+def test_post_short_message_no_snippet():
+    """Messages under MAX_SLACK_TEXT go through chat_postMessage directly."""
+    bridge = _make_bridge(_CFG)
+    bridge._web_client = MagicMock()
+    bridge._web_client.chat_postMessage.return_value = {"ok": True, "ts": "ts-001"}
+
+    result = bridge.post("short message")
+    assert result is True
+    bridge._web_client.chat_postMessage.assert_called_once()
+    bridge._web_client.files_upload_v2.assert_not_called()
+
+
+def test_post_long_message_uploads_snippet():
+    """Messages over MAX_SLACK_TEXT are uploaded as snippets + hint."""
+    bridge = _make_bridge(_CFG)
+    bridge._web_client = MagicMock()
+    bridge._web_client.files_upload_v2.return_value = {"ok": True}
+    bridge._web_client.chat_postMessage.return_value = {"ok": True, "ts": "ts-hint"}
+
+    long_text = "x" * 5000 + "\n───\n:thumbsup: allow · :thumbsdown: deny"
+    result = bridge.post(long_text)
+    assert result is True
+    bridge._web_client.files_upload_v2.assert_called_once()
+    # Hint posted as follow-up message
+    hint_call = bridge._web_client.chat_postMessage.call_args
+    assert "───" in hint_call.kwargs.get("text", hint_call[1].get("text", ""))
+    assert bridge._last_post_ts == "ts-hint"
+
+
+def test_post_long_message_without_divider():
+    """Long messages without ─── divider still get snippet + fallback hint."""
+    bridge = _make_bridge(_CFG)
+    bridge._web_client = MagicMock()
+    bridge._web_client.files_upload_v2.return_value = {"ok": True}
+    bridge._web_client.chat_postMessage.return_value = {"ok": True, "ts": "ts-fb"}
+
+    long_text = "x" * 5000
+    result = bridge.post(long_text)
+    assert result is True
+    bridge._web_client.files_upload_v2.assert_called_once()
+    # Fallback hint posted
+    hint_call = bridge._web_client.chat_postMessage.call_args
+    posted_text = hint_call.kwargs.get("text", hint_call[1].get("text", ""))
+    assert "allow" in posted_text
+
+
+def test_post_long_message_snippet_fails_falls_back():
+    """If files_upload_v2 fails, fall back to truncated text post."""
+    bridge = _make_bridge(_CFG)
+    bridge._web_client = MagicMock()
+    bridge._web_client.files_upload_v2.side_effect = Exception("upload failed")
+    bridge._web_client.chat_postMessage.return_value = {"ok": True, "ts": "ts-trunc"}
+
+    long_text = "x" * 5000
+    result = bridge.post(long_text)
+    assert result is True
+    # Should have fallen back to truncated chat_postMessage
+    bridge._web_client.chat_postMessage.assert_called_once()
+
+
 # --- Global lock + mode selection ---
 
 
