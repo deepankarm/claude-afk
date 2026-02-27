@@ -47,6 +47,14 @@ _EMOJI_NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
 
 PERMISSION_HINT = "\n───\n:thumbsup: allow · :thumbsdown: deny\n_or reply with feedback_"
 PLAN_HINT = "\n───\n:thumbsup: approve · :thumbsdown: reject\n_or reply with feedback_"
+TIMEOUT_REMINDER = (
+    ":bell: _Still waiting for your response…_"
+    "\n───\n:thumbsup: allow · :thumbsdown: deny\n_or reply with feedback_"
+)
+QUESTION_TIMEOUT_REMINDER = (
+    ":bell: _Still waiting for your answer…_"
+    "\n_Reply with a number or your own answer_"
+)
 
 
 def truncate(text: str, limit: int = MAX_SLACK_TEXT) -> str:

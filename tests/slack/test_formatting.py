@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from claude_afk.slack.formatting import (
+    QUESTION_TIMEOUT_REMINDER,
+    TIMEOUT_REMINDER,
     format_bash_prefix_hint,
     format_plan_approval,
     format_single_question,
@@ -217,3 +219,18 @@ def test_format_tool_permission_non_bash_ignores_prefixes():
         unapproved_prefixes=["something"],
     )
     assert "fast_forward" not in result
+
+
+# --- timeout reminders ---
+
+
+def test_timeout_reminder_has_action_hints():
+    assert "Still waiting" in TIMEOUT_REMINDER
+    assert "thumbsup" in TIMEOUT_REMINDER
+    assert "thumbsdown" in TIMEOUT_REMINDER
+    assert "───" in TIMEOUT_REMINDER
+
+
+def test_question_timeout_reminder_has_action_hints():
+    assert "Still waiting" in QUESTION_TIMEOUT_REMINDER
+    assert "answer" in QUESTION_TIMEOUT_REMINDER

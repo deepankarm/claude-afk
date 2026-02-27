@@ -32,7 +32,12 @@ from claude_afk.permissions import (
 )
 from claude_afk.shell import extract_command_prefixes
 from claude_afk.slack.bridge import REPLY_ALLOW, REPLY_ALWAYS_ALLOW, REPLY_DENY, SlackBridge
-from claude_afk.slack.formatting import format_single_question, format_tool_permission
+from claude_afk.slack.formatting import (
+    QUESTION_TIMEOUT_REMINDER,
+    TIMEOUT_REMINDER,
+    format_single_question,
+    format_tool_permission,
+)
 
 log = logging.getLogger("claude-afk.hooks.pretooluse")
 
@@ -93,9 +98,13 @@ def _handle_ask_user_question(
         if not bridge.post(text):
             return
 
-        reply = bridge.wait_for_reply()
-        if reply is None:
-            return
+        while True:
+            reply = bridge.wait_for_reply()
+            if reply is not None:
+                break
+            log.debug("question %d/%d timed out, posting reminder", qi + 1, total)
+            if not bridge.post(QUESTION_TIMEOUT_REMINDER):
+                return
 
         answer = resolve_question_answer(reply, q)
         answers.append(answer)
@@ -127,14 +136,24 @@ def _handle_permission(
     unapproved_prefixes: list[str] | None = None,
     all_prefixes: list[str] | None = None,
 ) -> None:
-    """Post permission prompt, wait for allow/deny reply."""
+    """Post permission prompt, wait for allow/deny reply.
+
+    On timeout, re-posts a reminder to Slack and keeps waiting.
+    Never returns without calling _emit() — returning silently
+    causes CC to fall back to its native terminal prompt, which
+    defeats the purpose of AFK routing.
+    """
     text = format_tool_permission(tool_name, tool_input, unapproved_prefixes)
     if not bridge.post(text):
         return
 
-    reply = bridge.wait_for_reply()
-    if reply is None:
-        return
+    while True:
+        reply = bridge.wait_for_reply()
+        if reply is not None:
+            break
+        log.debug("permission timed out, posting reminder and retrying")
+        if not bridge.post(TIMEOUT_REMINDER):
+            return
 
     log.debug("permission reply=%r tool=%s", reply, tool_name)
 
